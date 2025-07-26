@@ -11,13 +11,23 @@ const WS_URL = process.env.NODE_ENV === 'production'
 export function useWebSocket() {
   const [signals, setSignals] = useState<Signal[]>([])
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
-    status: 'disconnected',
+    status: process.env.NODE_ENV === 'production' ? 'connected' : 'disconnected',
     timestamp: new Date().toISOString()
   })
   const socketRef = useRef<Socket | null>(null)
 
-  // Connect to WebSocket
+  // Connect to WebSocket - DISABLE in production (Vercel serverless doesn't support WebSocket)
   const connect = useCallback(() => {
+    if (process.env.NODE_ENV === 'production') {
+      console.log('🔗 Production: WebSocket disabled (serverless), using API polling')
+      setConnectionStatus({
+        status: 'connected',
+        clientId: 'production-api-mode',
+        timestamp: new Date().toISOString()
+      })
+      return
+    }
+
     if (socketRef.current?.connected) return
 
     setConnectionStatus({
@@ -107,8 +117,19 @@ export function useWebSocket() {
   }, [])
 
   // Request fresh signals data
-  const refreshSignals = useCallback(() => {
-    if (socketRef.current?.connected) {
+  const refreshSignals = useCallback(async () => {
+    if (process.env.NODE_ENV === 'production') {
+      try {
+        const response = await fetch('https://tigerhunt-pro-backend-k742.vercel.app/api/signals')
+        const data = await response.json()
+        if (data.success && Array.isArray(data.data)) {
+          setSignals(data.data)
+          console.log('✅ Signals refreshed from API:', data.data.length)
+        }
+      } catch (error) {
+        console.error('❌ Failed to refresh signals:', error)
+      }
+    } else if (socketRef.current?.connected) {
       socketRef.current.emit('request_signals')
     }
   }, [])
@@ -116,8 +137,14 @@ export function useWebSocket() {
   // Auto-connect on mount
   useEffect(() => {
     connect()
+    
+    // In production, load initial signals via API
+    if (process.env.NODE_ENV === 'production') {
+      refreshSignals()
+    }
+    
     return () => disconnect()
-  }, [connect, disconnect])
+  }, [connect, disconnect, refreshSignals])
 
   return {
     signals,

@@ -32,11 +32,17 @@ module.exports = async (req, res) => {
     });
   }
 
-  if (url.startsWith('/api/signals')) {
+  if (url.startsWith('/api/signals') || url.startsWith('/signals')) {
     if (method === 'GET') {
       return res.status(200).json({
         success: true,
         data: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 0,
+          totalItems: 0,
+          itemsPerPage: 10
+        },
         message: 'Signals endpoint working - no backend database connected yet'
       });
     }
@@ -44,7 +50,73 @@ module.exports = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: 'Signal creation endpoint working',
-        data: { id: 'test', ...req.body }
+        data: { 
+          id: Date.now().toString(),
+          action: req.body.action || 'BUY',
+          symbol: req.body.symbol || 'BTCUSDT',
+          price: req.body.price || 50000,
+          timestamp: new Date().toISOString(),
+          source: 'api',
+          status: 'active',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          ...req.body 
+        }
+      });
+    }
+    if (method === 'DELETE') {
+      const signalId = url.split('/').pop();
+      return res.status(200).json({
+        success: true,
+        message: `Signal ${signalId} deleted successfully`
+      });
+    }
+  }
+
+  if (url.startsWith('/api/trades') || url.startsWith('/trades')) {
+    if (method === 'GET') {
+      if (url.includes('/analytics')) {
+        return res.status(200).json({
+          success: true,
+          data: {
+            overview: {
+              totalTrades: 0,
+              closedTrades: 0,
+              openTrades: 0,
+              totalPnL: '$0.00',
+              winRate: '0%',
+              profitFactor: '0'
+            },
+            performance: {
+              winningTrades: 0,
+              losingTrades: 0,
+              avgWin: '$0.00',
+              avgLoss: '$0.00',
+              bestTrade: '$0.00',
+              worstTrade: '$0.00'
+            },
+            risk: {
+              totalRisk: '$0.00',
+              avgRiskPerTrade: '$0.00',
+              maxDrawdown: '0%',
+              sharpeRatio: '0'
+            }
+          }
+        });
+      } else {
+        return res.status(200).json({
+          success: true,
+          data: [],
+          total: 0,
+          message: 'Trades endpoint working - no backend database connected yet'
+        });
+      }
+    }
+    if (method === 'POST') {
+      return res.status(200).json({
+        success: true,
+        message: 'Trade creation endpoint working',
+        data: { id: Date.now().toString(), ...req.body }
       });
     }
   }
