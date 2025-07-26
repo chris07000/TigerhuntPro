@@ -1,46 +1,58 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-require('dotenv').config();
+// Simple serverless function for testing
+module.exports = async (req, res) => {
+  // Set CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-const signalRoutes = require('../src/routes/signals');
-const webhookRoutes = require('../src/routes/webhook');
-const tradeRoutes = require('../src/routes/trades');
-const { initializeDatabase } = require('../src/utils/database');
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
 
-const app = express();
+  // Basic routing
+  const { url, method } = req;
 
-// Security middleware
-app.use(helmet());
-app.use(cors({
-  origin: process.env.FRONTEND_URL || "https://tigerhunt-pro-frontend-a7pu.vercel.app",
-  credentials: true
-}));
+  if (url === '/' || url === '/api') {
+    return res.status(200).json({
+      status: 'Tiger Hunt Pro API is running!',
+      timestamp: new Date().toISOString(),
+      version: '1.0.0',
+      method: method,
+      url: url
+    });
+  }
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+  if (url === '/health' || url === '/api/health') {
+    return res.status(200).json({
+      status: 'OK',
+      timestamp: new Date().toISOString()
+    });
+  }
 
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'Tiger Hunt Pro API is running!',
-    timestamp: new Date().toISOString(),
-    version: '1.0.0'
+  if (url.startsWith('/api/signals')) {
+    if (method === 'GET') {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        message: 'Signals endpoint working - no backend database connected yet'
+      });
+    }
+    if (method === 'POST') {
+      return res.status(200).json({
+        success: true,
+        message: 'Signal creation endpoint working',
+        data: { id: 'test', ...req.body }
+      });
+    }
+  }
+
+  // Default response
+  res.status(404).json({
+    error: 'Endpoint not found',
+    url: url,
+    method: method,
+    availableEndpoints: ['/', '/health', '/api/signals']
   });
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
-// API routes
-app.use('/api/signals', signalRoutes);
-app.use('/api/webhook', webhookRoutes);
-app.use('/api/trades', tradeRoutes);
-
-// Initialize database for serverless
-initializeDatabase().catch(console.error);
-
-// Export for Vercel
-module.exports = app; 
+}; 
