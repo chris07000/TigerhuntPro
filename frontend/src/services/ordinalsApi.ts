@@ -52,12 +52,49 @@ class OrdinalsService {
     error?: string
   }> {
     try {
+      // TEMPORARY: Allow specific addresses for testing (REMOVE AFTER TESTING)
+      const testAddresses: string[] = [
+        // Add specific addresses here for testing if needed
+      ]
+      
+      if (testAddresses.includes(address)) {
+        console.log('🧪 TEST ACCESS: Allowing specific address for testing')
+        return {
+          hasValidTiger: true,
+          tigerOrdinals: [{
+            id: 'test-tiger-inscription',
+            number: 99999,
+            address: address,
+            content_type: 'image/png',
+            genesis_height: 800000,
+            timestamp: Date.now(),
+            content: 'test-tiger-content',
+            preview: 'test-tiger-preview'
+          }],
+          totalInscriptions: 1
+        }
+      }
+      
       // Check Tiger ownership with configured IDs
       const allInscriptions = await this.fetchAllInscriptions(address)
       const tigerOrdinals = this.identifyTigerInscriptions(allInscriptions)
       
       if (tigerOrdinals.length > 0) {
         console.log('✅ Bitcoin Tiger ownership verified!')
+      } else {
+        console.log('❌ No Bitcoin Tiger ordinals found')
+        console.log('📊 Analysis results:')
+        console.log(`   - Total inscriptions checked: ${allInscriptions.length}`)
+        console.log(`   - Tiger collection IDs configured: ${this.tigerCollectionIds.size}`)
+        console.log(`   - Using keyword fallback: ${this.tigerCollectionIds.size === 0}`)
+        
+        // Show sample of inscriptions for debugging
+        if (allInscriptions.length > 0) {
+          console.log('📝 Sample inscriptions (first 5):')
+          allInscriptions.slice(0, 5).forEach(ins => {
+            console.log(`   - #${ins.number}: ${ins.id.substring(0, 12)}... (${ins.content_type})`)
+          })
+        }
       }
       
       return {
@@ -82,14 +119,35 @@ class OrdinalsService {
    */
   private async fetchAllInscriptions(address: string): Promise<Inscription[]> {
     try {
-      // Fetch from Hiro API
-      const response = await axios.get(`https://api.hiro.so/ordinals/v1/inscriptions`, {
-        params: { address, limit: 60, offset: 0 },
-        timeout: 10000
-      })
+      // Fetch ALL inscriptions with pagination
+      let allInscriptions: any[] = []
+      let offset = 0
+      const limit = 60
+      let hasMore = true
       
-      if (response.data?.results) {
-        return response.data.results.map((item: any) => ({
+      console.log(`🔍 Fetching ALL inscriptions for ${address}...`)
+      
+      while (hasMore && offset < 1000) { // Safety limit of 1000 inscriptions
+        const response = await axios.get(`https://api.hiro.so/ordinals/v1/inscriptions`, {
+          params: { address, limit, offset },
+          timeout: 10000
+        })
+        
+        if (response.data?.results && response.data.results.length > 0) {
+          allInscriptions.push(...response.data.results)
+          offset += limit
+          hasMore = response.data.results.length === limit
+          
+          console.log(`📡 Fetched batch: ${response.data.results.length} inscriptions (total: ${allInscriptions.length})`)
+        } else {
+          hasMore = false
+        }
+      }
+      
+      console.log(`✅ Total inscriptions fetched: ${allInscriptions.length}`)
+      
+      if (allInscriptions.length > 0) {
+        return allInscriptions.map((item: any) => ({
           id: item.id,
           number: item.number,
           address: item.address,
@@ -104,13 +162,16 @@ class OrdinalsService {
       return []
       
     } catch (error: any) {
+      console.warn('❌ Hiro API failed, trying OrdAPI fallback...', error.message)
+      
       // Fallback to OrdAPI
       try {
         const response = await axios.get(`https://ordapi.xyz/address/${address}/inscriptions`, {
-          timeout: 8000
+          timeout: 15000 // Longer timeout for potentially large response
         })
         
         if (response.data && Array.isArray(response.data)) {
+          console.log(`✅ OrdAPI fallback: ${response.data.length} inscriptions`)
           return response.data.map((item: any) => ({
             id: item.id || item.inscription_id,
             number: item.inscription_number || item.number,
@@ -121,7 +182,7 @@ class OrdinalsService {
           }))
         }
       } catch (fallbackError) {
-        // Silent fallback failure
+        console.error('❌ Both APIs failed:', fallbackError)
       }
       
       return []
@@ -132,14 +193,18 @@ class OrdinalsService {
    * Identificeer Bitcoin Tiger inscriptions gebaseerd op content/metadata
    */
   private identifyTigerInscriptions(inscriptions: Inscription[]): Inscription[] {
-    return inscriptions.filter(inscription => {
+    console.log(`🔍 Analyzing ${inscriptions.length} inscriptions for Bitcoin Tiger matches...`)
+    
+    const tigerMatches = inscriptions.filter(inscription => {
       // Check exact Tiger ID match (primary method)
       if (this.tigerCollectionIds.has(inscription.id)) {
+        console.log(`✅ Exact ID match found: ${inscription.id}`)
         return true
       }
       
       // Check parent inscription ID
       if (this.tigerParentId && inscription.parent === this.tigerParentId) {
+        console.log(`✅ Parent ID match found: ${inscription.id}`)
         return true
       }
       
@@ -147,19 +212,51 @@ class OrdinalsService {
       if (this.tigerNumberRange && inscription.number) {
         const { min, max } = this.tigerNumberRange
         if (inscription.number >= min && inscription.number <= max) {
+          console.log(`✅ Number range match found: #${inscription.number}`)
           return true
         }
       }
       
-      // Check content for Tiger keywords (fallback)
+      // Enhanced content checking for Bitcoin Tiger Collective
       const content = inscription.content?.toLowerCase() || ''
       const preview = inscription.preview?.toLowerCase() || ''
-      const tigerKeywords = ['tiger', 'tigerhunt', 'tiger hunt', 'tiger collective']
+      const contentType = inscription.content_type?.toLowerCase() || ''
       
-      return tigerKeywords.some(keyword => 
-        content.includes(keyword) || preview.includes(keyword)
+      // Specific Tiger patterns
+      const tigerPatterns = [
+        'bitcoin tiger',
+        'tiger collective', 
+        'tigerhunt',
+        'tiger hunt',
+        'btc tiger',
+        'tiger ord',
+        'tiger nft'
+      ]
+      
+      // Check for Tiger patterns in content/preview
+      const hasTimerPattern = tigerPatterns.some(pattern => 
+        content.includes(pattern) || preview.includes(pattern)
       )
+      
+      // Additional check for image content that might be Tigers
+      const isImageWithTiger = (contentType.includes('image') || contentType.includes('png') || contentType.includes('jpg')) &&
+                              (content.includes('tiger') || preview.includes('tiger'))
+      
+      if (hasTimerPattern || isImageWithTiger) {
+        console.log(`🐅 Content match found: ${inscription.id} (${contentType})`)
+        return true
+      }
+      
+      return false
     })
+    
+    console.log(`🔍 Found ${tigerMatches.length} Bitcoin Tiger matches out of ${inscriptions.length} total inscriptions`)
+    
+    if (tigerMatches.length > 0) {
+      console.log('🐅 Tiger matches:', tigerMatches.map(t => `#${t.number} (${t.id.substring(0, 8)}...)`))
+    }
+    
+    return tigerMatches
   }
 
   /**
