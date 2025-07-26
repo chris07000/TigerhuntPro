@@ -1,22 +1,18 @@
 import axios from 'axios'
 import { Signal, CreateSignalRequest, PaginatedSignalResponse, SignalFilters } from '@/types/signal'
 
-// Dynamic API URL for production deployment
+// Force production backend URL
 const getApiBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    // Client-side: use current domain in production
-    if (process.env.NODE_ENV === 'production') {
-      return `${window.location.origin}/api`
-    }
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://tigerhunt-pro-backend-k742.vercel.app'
   }
-  // Server-side or development
   return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 }
 
 const API_BASE_URL = getApiBaseUrl()
 
 const api = axios.create({
-  baseURL: process.env.NODE_ENV === 'production' ? '/api' : `${API_BASE_URL}/api`,
+  baseURL: process.env.NODE_ENV === 'production' ? 'https://tigerhunt-pro-backend-k742.vercel.app/api' : `${API_BASE_URL}/api`,
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -48,48 +44,42 @@ api.interceptors.response.use(
 )
 
 export const signalApi = {
-  // Alle signalen ophalen met paginatie en filtering
-  getSignals: async (filters: SignalFilters & { page?: number; limit?: number } = {}) => {
-    const response = await api.get<PaginatedSignalResponse>('/signals', { params: filters })
-    return response.data
+  getAllSignals: async (filters?: SignalFilters): Promise<PaginatedSignalResponse> => {
+    try {
+      const response = await api.get('/signals', { params: filters })
+      return response.data
+    } catch (error) {
+      // Fallback to empty data if backend not available
+              return {
+          success: false,
+          data: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: 10
+          }
+        }
+    }
   },
 
-  // Specifiek signaal ophalen
-  getSignalById: async (id: string) => {
-    const response = await api.get<{ success: boolean; data: Signal }>(`/signals/${id}`)
-    return response.data
+  createSignal: async (signal: CreateSignalRequest): Promise<Signal> => {
+    try {
+      const response = await api.post('/signals', signal)
+      return response.data
+    } catch (error) {
+      console.error('Failed to create signal:', error)
+      throw error
+    }
   },
 
-  // Handmatig signaal aanmaken
-  createSignal: async (signalData: CreateSignalRequest) => {
-    const response = await api.post<{ success: boolean; data: Signal }>('/signals', signalData)
-    return response.data
-  },
-
-  // Signaal updaten
-  updateSignal: async (id: string, updateData: Partial<CreateSignalRequest>) => {
-    const response = await api.put<{ success: boolean; data: Signal }>(`/signals/${id}`, updateData)
-    return response.data
-  },
-
-  // Signaal verwijderen
-  deleteSignal: async (id: string) => {
-    const response = await api.delete<{ success: boolean }>(`/signals/${id}`)
-    return response.data
-  },
-
-  // Test webhook endpoint
-  testWebhook: async (testData = {}) => {
-    const response = await api.post('/webhook/test', testData)
-    return response.data
-  }
-}
-
-export const healthApi = {
-  // Health check
-  checkHealth: async () => {
-    const response = await api.get('/health')
-    return response.data
+  deleteSignal: async (id: string): Promise<void> => {
+    try {
+      await api.delete(`/signals/${id}`)
+    } catch (error) {
+      console.error('Failed to delete signal:', error)
+      throw error
+    }
   }
 }
 
