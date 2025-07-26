@@ -112,6 +112,15 @@ process.on('SIGTERM', () => {
   });
 });
 
-startServer();
+// Initialize database for serverless functions
+if (process.env.VERCEL) {
+  initializeDatabase().catch(console.error);
+}
 
-module.exports = { app, server, io }; 
+// For local development
+if (require.main === module) {
+  startServer();
+}
+
+// For Vercel serverless deployment
+module.exports = app; 
