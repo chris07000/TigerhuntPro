@@ -1,11 +1,10 @@
 // Simple serverless function for testing
 module.exports = async (req, res) => {
-  // Set CORS headers - allow frontend domain
-  const frontendUrl = process.env.FRONTEND_URL || 'https://tigerhunt-pro-frontend-a7pu.vercel.app';
-  res.setHeader('Access-Control-Allow-Origin', frontendUrl);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  // NUCLEAR CORS FIX - ALLOW EVERYTHING
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', '*');
+  res.setHeader('Access-Control-Allow-Headers', '*');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
