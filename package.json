@@ -1,0 +1,31 @@
+{
+  "name": "tiger-hunt-pro-dashboard",
+  "version": "1.0.0",
+  "description": "Tiger Hunt Pro - AI Market Maker Trading Signals Dashboard",
+  "private": true,
+  "scripts": {
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm start",
+    "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
+    "install-deps": "cd frontend && npm install && cd ../backend && npm install",
+    "vercel-build": "cd frontend && npm run build"
+  },
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  },
+  "keywords": [
+    "trading",
+    "signals",
+    "dashboard",
+    "bitcoin",
+    "ordinals",
+    "tiger-hunt-pro",
+    "ai-market-maker"
+  ],
+  "author": "Tiger Hunt Pro Team",
+  "license": "MIT"
+} 
