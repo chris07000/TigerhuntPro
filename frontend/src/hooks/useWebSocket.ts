@@ -19,12 +19,12 @@ export function useWebSocket() {
   // Connect to WebSocket - DISABLE in production (Vercel serverless doesn't support WebSocket)
   const connect = useCallback(() => {
     if (process.env.NODE_ENV === 'production') {
-      console.log('🔗 Production: WebSocket disabled (serverless), using API polling')
       setConnectionStatus({
         status: 'connected',
         clientId: 'production-api-mode',
         timestamp: new Date().toISOString()
       })
+      console.log('🔗 Production API mode active')
       return
     }
 
@@ -124,7 +124,10 @@ export function useWebSocket() {
         const data = await response.json()
         if (data.success && Array.isArray(data.data)) {
           setSignals(data.data)
-          console.log('✅ Signals refreshed from API:', data.data.length)
+          // Only log if signals changed
+          if (data.data.length !== signals.length) {
+            console.log('🔄 Signals updated:', data.data.length)
+          }
         }
       } catch (error) {
         console.error('❌ Failed to refresh signals:', error)
@@ -132,7 +135,7 @@ export function useWebSocket() {
     } else if (socketRef.current?.connected) {
       socketRef.current.emit('request_signals')
     }
-  }, [])
+  }, [signals.length])
 
   // Auto-connect on mount
   useEffect(() => {
@@ -142,10 +145,10 @@ export function useWebSocket() {
     if (process.env.NODE_ENV === 'production') {
       refreshSignals()
       
-      // AUTO-REFRESH SIGNALS EVERY 5 SECONDS
+      // AUTO-REFRESH SIGNALS EVERY 30 SECONDS (production optimized)
       const interval = setInterval(() => {
         refreshSignals()
-      }, 5000)
+      }, 30000)
       
       return () => {
         disconnect()

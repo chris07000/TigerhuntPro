@@ -29,23 +29,19 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
 
   // Function to detect new positions and auto-create signals
   const detectNewPositionsAndCreateSignals = async (currentSummary: HyperliquidAccountSummary, forceSignals = false) => {
-    console.log('🔍 AUTO-SIGNAL CHECK STARTED', {
-      autoSignalEnabled,
-      hasPositions: !!currentSummary.assetPositions,
-      positionsCount: currentSummary.assetPositions?.length || 0,
-      isFirstLoad: isFirstLoadRef.current,
-      activeAddress,
-      previousPositionsCount: previousPositionsRef.current.size,
-      forceSignals,
-      hasInitialized: hasInitializedRef.current
-    })
-
-    if (!autoSignalEnabled || !currentSummary.assetPositions) {
-              // Auto-signals disabled or no positions
-      return
+    // Only log if forced or first load (reduce console spam)
+    if (forceSignals || isFirstLoadRef.current) {
+      console.log('🔍 AUTO-SIGNAL CHECK', {
+        autoSignalEnabled,
+        positionsCount: currentSummary.assetPositions?.length || 0,
+        forceSignals,
+        hasInitialized: hasInitializedRef.current
+      })
     }
 
-    console.log('✅ Auto-signals ENABLED - proceeding with detection...')
+    if (!autoSignalEnabled || !currentSummary.assetPositions) {
+      return
+    }
 
     const currentPositions = new Set<string>()
     const newPositions: Array<{
@@ -68,25 +64,14 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
         const isNewPosition = !previousPositionsRef.current.has(positionKey)
         const shouldCreateSignal = forceSignals || (isNewPosition && hasInitializedRef.current)
 
-              console.log('📊 Position found:', {
-          symbol: formatted.symbol,
-          side: formatted.side,
-          size: formatted.size,
-          entryPrice: asset.position.entryPx,
-          positionKey,
-          isNewPosition,
-          shouldCreateSignal,
-          isFirstLoad: isFirstLoadRef.current,
-          hasInitialized: hasInitializedRef.current,
-          forceSignals,
-          previousPositionsSize: previousPositionsRef.current.size,
-          rawSymbol: asset.position.coin || 'N/A'
-        })
-        
-        if (forceSignals) {
-          console.log('🔥 FORCE MODE: Creating signal regardless of other conditions!')
-        } else {
-          console.log('⚙️ Normal mode: shouldCreateSignal =', shouldCreateSignal, 'isNewPosition =', isNewPosition, 'hasInitialized =', hasInitializedRef.current)
+        // Only log position details if it's a new position or forced
+        if (shouldCreateSignal || forceSignals) {
+          console.log('📊 Position detected:', {
+            symbol: formatted.symbol,
+            side: formatted.side,
+            isNewPosition,
+            shouldCreateSignal
+          })
         }
       
       if (shouldCreateSignal) {
@@ -335,19 +320,18 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
     // Mark first load as complete and enable auto-signal detection
     if (isFirstLoadRef.current) {
       isFirstLoadRef.current = false
+      console.log('✅ Position tracking started')
       // Enable auto-signals after a delay to prevent immediate signals on refresh
       setTimeout(() => {
         hasInitializedRef.current = true
-        console.log('✅ Auto-signal detection initialized - ready for new positions')
+        console.log('✅ Auto-signal detection ready')
       }, 5000) // 5 second delay
-      console.log('✅ First load complete - position tracking started')
     }
 
     if (newPositions.length > 0) {
       console.log(`🚀 Created ${newPositions.length} auto-signals from Treasury trades!`)
-    } else {
-      console.log('📝 No new positions detected')
     }
+    // Removed "No new positions detected" to reduce console spam
   }
 
 
