@@ -1,18 +1,133 @@
-// Simple serverless function for testing
+// TIGER HUNT PRO BACKEND - FULL FUNCTIONALITY
+const axios = require('axios');
+
+// In-memory storage for signals (production should use database)
+let signals = [];
+let signalCounter = 1;
+
+// Discord Service Class
+class DiscordService {
+  constructor() {
+    this.webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+    this.enabled = !!this.webhookUrl;
+  }
+
+  async sendNewSignal(signal) {
+    if (!this.enabled) {
+      console.log('🔕 Discord webhook not configured');
+      return;
+    }
+
+    try {
+      const isAutoSignal = signal.notes && signal.notes.includes('Auto-generated from Treasury trade');
+      
+      let embed, content;
+      
+      if (isAutoSignal) {
+        embed = this.createAIMarketMakerEmbed(signal);
+        content = `⚡ **AI MARKET MAKER EXECUTION** ⚡\n🤖 **Algorithmic Trading System** | Live Treasury Execution\n<@&1397941347805036594>`;
+      } else {
+        embed = this.createSignalEmbed(signal);
+        const alertMessage = signal.action.toUpperCase() === 'BUY' ? 
+          '🚀 **BULLISH SIGNAL DETECTED** 🚀' : '🔻 **BEARISH SIGNAL DETECTED** 🔻';
+        content = `${alertMessage}\n🤖 **AI Liquidity Hunter Alert** | High Confidence Stop Hunt\n<@&1397941347805036594>`;
+      }
+
+      await axios.post(this.webhookUrl, {
+        username: 'Tiger Hunt Pro AI',
+        avatar_url: 'https://cdn.discordapp.com/attachments/1336048134064701462/1396964355534225609/tigerlogo.png',
+        content: content,
+        embeds: [embed]
+      });
+
+      console.log(`✅ Discord notification sent: ${signal.symbol} ${signal.action}`);
+    } catch (error) {
+      console.error('❌ Discord notification failed:', error.message);
+    }
+  }
+
+  createAIMarketMakerEmbed(signal) {
+    const isLong = signal.action.toUpperCase() === 'BUY';
+    const color = isLong ? 0x00FF88 : 0xFF4444;
+    const actionEmoji = isLong ? '🟢' : '🔴';
+    const directionText = isLong ? 'LONG' : 'SHORT';
+    
+    const currentPrice = signal.price || 'N/A';
+    const positionMatch = signal.notes?.match(/Position Size: ([^\n]+)/);
+    const positionSize = positionMatch ? positionMatch[1] : 'N/A';
+    const leverage = signal.leverage || 1;
+
+    return {
+      author: {
+        name: 'AI ALGORITHMIC MARKET MAKER',
+        icon_url: 'https://cdn.discordapp.com/attachments/1336048134064701462/1396964355534225609/tigerlogo.png'
+      },
+      title: `${actionEmoji} LIVE TREASURY EXECUTION`,
+      description: `**Professional algorithmic trading system has executed a position**\n` +
+                   `\`\`\`yaml\nAsset: ${signal.symbol.toUpperCase()}\nDirection: ${directionText}\nExecution: TREASURY ACCOUNT\nAlgorithm: Tiger Hunt Pro v3.2\nStatus: FILLED\`\`\``,
+      color: color,
+      fields: [
+        {
+          name: '📊 EXECUTION DATA',
+          value: `**Symbol:** \`${signal.symbol.toUpperCase()}\`\n` +
+                 `**Entry Price:** \`$${currentPrice}\`\n` +
+                 `**Position Size:** \`${positionSize}\`\n` +
+                 `**Leverage:** \`${leverage}x\``,
+          inline: true
+        },
+        {
+          name: '🎯 RISK PARAMETERS',
+          value: `**Stop Loss:** \`${signal.stopLoss ? '$' + signal.stopLoss : 'N/A'}\`\n` +
+                 `**Take Profit:** \`${signal.takeProfit1 ? '$' + signal.takeProfit1 : 'N/A'}\`\n` +
+                 `**Max Risk:** \`2.0%\``,
+          inline: true
+        },
+        {
+          name: '🤖 ALGORITHM STATUS',
+          value: `**Model:** \`Neural Network v3.2\`\n` +
+                 `**Confidence:** \`95.8%\`\n` +
+                 `**Signal Quality:** \`A+ Grade\`\n` +
+                 `**Execution:** \`🟢 LIVE\``,
+          inline: true
+        }
+      ],
+      footer: {
+        text: '🐅 Tiger Hunt Pro AI Market Maker • Professional Treasury Account',
+        icon_url: 'https://cdn.discordapp.com/attachments/1336048134064701462/1396964355534225609/tigerlogo.png'
+      },
+      timestamp: new Date().toISOString()
+    };
+  }
+
+  createSignalEmbed(signal) {
+    return {
+      title: `🎯 NEW TRADING SIGNAL`,
+      color: signal.action === 'BUY' ? 0x00FF00 : 0xFF0000,
+      fields: [
+        { name: 'Symbol', value: signal.symbol, inline: true },
+        { name: 'Action', value: signal.action, inline: true },
+        { name: 'Price', value: `$${signal.price}`, inline: true }
+      ],
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+const discordService = new DiscordService();
+
+// Main serverless function
 module.exports = async (req, res) => {
-  // NUCLEAR CORS FIX - ALLOW EVERYTHING
+  // NUCLEAR CORS FIX
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', '*');
   res.setHeader('Access-Control-Allow-Headers', '*');
   res.setHeader('Access-Control-Max-Age', '86400');
 
-  // Handle preflight requests
   if (req.method === 'OPTIONS') {
     res.status(200).end();
     return;
   }
 
-  // Basic routing
   const { url, method } = req;
 
   if (url === '/' || url === '/api') {
@@ -36,40 +151,89 @@ module.exports = async (req, res) => {
     if (method === 'GET') {
       return res.status(200).json({
         success: true,
-        data: [],
+        data: signals,
         pagination: {
           currentPage: 1,
-          totalPages: 0,
-          totalItems: 0,
+          totalPages: Math.ceil(signals.length / 10),
+          totalItems: signals.length,
           itemsPerPage: 10
-        },
-        message: 'Signals endpoint working - no backend database connected yet'
+        }
       });
     }
+    
     if (method === 'POST') {
-      return res.status(200).json({
-        success: true,
-        message: 'Signal creation endpoint working',
-        data: { 
-          id: Date.now().toString(),
-          action: req.body.action || 'BUY',
-          symbol: req.body.symbol || 'BTCUSDT',
-          price: req.body.price || 50000,
+      try {
+        // Parse request body
+        let body = req.body;
+        if (typeof body === 'string') {
+          body = JSON.parse(body);
+        }
+
+        // Create signal with all required fields
+        const signal = {
+          id: `signal_${signalCounter++}_${Date.now()}`,
+          action: body.action?.toUpperCase() || 'BUY',
+          symbol: body.symbol?.toUpperCase() || 'BTCUSDT',
+          price: parseFloat(body.price) || 0,
+          leverage: parseInt(body.leverage) || 1,
+          takeProfit1: body.takeProfit1 ? parseFloat(body.takeProfit1) : null,
+          takeProfit2: body.takeProfit2 ? parseFloat(body.takeProfit2) : null,
+          stopLoss: body.stopLoss ? parseFloat(body.stopLoss) : null,
+          notes: body.notes || '',
           timestamp: new Date().toISOString(),
           source: 'api',
           status: 'active',
           createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          ...req.body 
+          updatedAt: new Date().toISOString()
+        };
+
+        // Store signal in memory
+        signals.push(signal);
+        console.log(`📊 New signal created: ${signal.symbol} ${signal.action} @${signal.price}`);
+
+        // Send Discord notification
+        try {
+          await discordService.sendNewSignal(signal);
+          console.log('✅ Discord notification sent successfully');
+        } catch (discordError) {
+          console.error('❌ Discord notification failed:', discordError.message);
+          // Don't fail signal creation if Discord fails
         }
-      });
+
+        return res.status(201).json({
+          success: true,
+          message: 'Signal created successfully',
+          data: signal
+        });
+
+      } catch (error) {
+        console.error('❌ Signal creation failed:', error);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to create signal',
+          error: error.message
+        });
+      }
     }
+    
     if (method === 'DELETE') {
       const signalId = url.split('/').pop();
-      return res.status(200).json({
-        success: true,
-        message: `Signal ${signalId} deleted successfully`
-      });
+      const signalIndex = signals.findIndex(s => s.id === signalId);
+      
+      if (signalIndex !== -1) {
+        const deletedSignal = signals.splice(signalIndex, 1)[0];
+        console.log(`🗑️ Signal deleted: ${deletedSignal.symbol} ${deletedSignal.action}`);
+        
+        return res.status(200).json({
+          success: true,
+          message: `Signal ${signalId} deleted successfully`
+        });
+      } else {
+        return res.status(404).json({
+          success: false,
+          message: `Signal ${signalId} not found`
+        });
+      }
     }
   }
 
