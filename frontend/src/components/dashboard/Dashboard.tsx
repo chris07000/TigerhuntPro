@@ -174,6 +174,33 @@ export default function Dashboard() {
               >
                 Tiger RISK
               </a>
+              <a
+                href="/trading"
+                style={{
+                  padding: '12px 24px',
+                  border: '1px solid rgba(255,68,68,0.4)',
+                  borderRadius: '8px',
+                  backgroundColor: 'rgba(255,68,68,0.1)',
+                  color: '#ff4444',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s ease'
+                }}
+                onMouseEnter={(e) => {
+                  const target = e.target as HTMLElement
+                  target.style.backgroundColor = 'rgba(255,68,68,0.15)'
+                  target.style.borderColor = 'rgba(255,68,68,0.6)'
+                }}
+                onMouseLeave={(e) => {
+                  const target = e.target as HTMLElement
+                  target.style.backgroundColor = 'rgba(255,68,68,0.1)'
+                  target.style.borderColor = 'rgba(255,68,68,0.4)'
+                }}
+              >
+                🔧 ADMIN TRADING
+              </a>
             </div>
             
             {/* Referral Button */}
