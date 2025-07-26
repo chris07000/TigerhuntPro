@@ -6,9 +6,10 @@ import { signalApi } from '@/services/api'
 
 interface HyperliquidTradesProps {
   walletAddress?: string;
+  onSignalCreated?: () => void | Promise<void>;
 }
 
-export default function HyperliquidTrades({ walletAddress }: HyperliquidTradesProps) {
+export default function HyperliquidTrades({ walletAddress, onSignalCreated }: HyperliquidTradesProps) {
   const [accountSummary, setAccountSummary] = useState<HyperliquidAccountSummary | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -309,6 +310,16 @@ export default function HyperliquidTrades({ walletAddress }: HyperliquidTradesPr
 
         console.log('✅ Auto-signal created successfully:', result)
         console.log('🎯 Signal should now appear in dashboard and Discord!')
+        
+        // Trigger signals refresh on Dashboard
+        if (onSignalCreated) {
+          try {
+            await onSignalCreated()
+            console.log('🔄 Dashboard signals refreshed!')
+          } catch (refreshError) {
+            console.error('❌ Failed to refresh signals:', refreshError)
+          }
+        }
         
       } catch (error: any) {
         console.error('❌ Failed to create auto-signal for', position.symbol, error)

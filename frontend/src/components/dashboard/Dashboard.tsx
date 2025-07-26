@@ -235,7 +235,7 @@ export default function Dashboard() {
       <div className="main-content">
         <div className="container mx-auto px-6">
           {/* Hyperliquid Trades - Full Width */}
-          <HyperliquidTrades />
+          <HyperliquidTrades onSignalCreated={refreshSignals} />
           
           <div className="charts-grid">
             {/* Signals List */}

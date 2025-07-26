@@ -141,6 +141,16 @@ export function useWebSocket() {
     // In production, load initial signals via API
     if (process.env.NODE_ENV === 'production') {
       refreshSignals()
+      
+      // AUTO-REFRESH SIGNALS EVERY 5 SECONDS
+      const interval = setInterval(() => {
+        refreshSignals()
+      }, 5000)
+      
+      return () => {
+        disconnect()
+        clearInterval(interval)
+      }
     }
     
     return () => disconnect()
