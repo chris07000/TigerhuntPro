@@ -5,7 +5,6 @@ import { useWebSocket } from '@/hooks/useWebSocket'
 import { signalApi } from '@/services/api'
 import { CreateSignalRequest } from '@/types/signal'
 import AdminLogin from '@/components/AdminLogin'
-import ProtectedRoute from '@/components/ProtectedRoute'
 
 export default function TradingPage() {
   const { signals, connectionStatus, isConnected } = useWebSocket()
@@ -193,7 +192,6 @@ export default function TradingPage() {
   }
 
   return (
-    <ProtectedRoute requireVerification={true}>
       <AdminLogin>
       <div className="min-h-screen" style={{ backgroundColor: '#000000' }}>
       {/* Header */}
@@ -701,6 +699,5 @@ export default function TradingPage() {
       </div>
     </div>
     </AdminLogin>
-    </ProtectedRoute>
   )
 }
