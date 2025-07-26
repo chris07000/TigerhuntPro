@@ -4,7 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { Signal, ConnectionStatus, WebSocketSignalEvent } from '@/types/signal'
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:5000'
+const WS_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://tigerhunt-pro-backend-k742.vercel.app' 
+  : (process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:5000')
 
 export function useWebSocket() {
   const [signals, setSignals] = useState<Signal[]>([])
