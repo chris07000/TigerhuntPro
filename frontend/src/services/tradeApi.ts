@@ -1,6 +1,14 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+// Force production backend URL
+const getApiBaseUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://tigerhunt-pro-backend-k742.vercel.app'
+  }
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface Trade {
   id: string;
