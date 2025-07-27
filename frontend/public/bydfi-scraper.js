@@ -186,65 +186,145 @@
       
       const positions = [];
       
-             // Enhanced selectors for BYDFI positions detection
-       const possibleSelectors = [
-         'table tbody tr',                    // Standard table rows
-         'table tr',                          // All table rows
-         '.position-row',                     // Custom position rows
-         '[data-testid*="position"]',         // Test ID attributes
-         '.futures-position',                 // Futures specific
-         '.position-item',                    // Position items
-         'tr[role="row"]',                    // Table rows with role
-         '[class*="position"]',               // Any class containing position
-         '[class*="Position"]',               // Any class containing Position
-         '[class*="table"] tr',               // Table rows in any table class
-         '[class*="Table"] tr',               // Table rows in any Table class
-         'div[role="row"]',                   // Div rows
-         '.ant-table-tbody tr',               // Ant Design table rows
-         '.el-table__body tr',                // Element UI table rows
-         '*[class*="order"]',                 // Order related classes
-         '*[class*="trade"]',                 // Trade related classes
-         '*[class*="row"]',                   // Any row classes
-         'tr',                                // All table rows
-         'div[class*="cell"]',                // Div cells
-         'span[class*="cell"]'                // Span cells
-       ];
+             // First, try to find the BYDFI positions table specifically
+       let positionsTable = null;
+       
+       // Look for elements containing "Positions" text
+       const allElements = document.querySelectorAll('*');
+       for (const element of allElements) {
+         const text = element.textContent || '';
+         if (text.includes('Positions(') || text.includes('Position(') || 
+             (text.includes('Positions') && text.length < 50)) {
+           console.log('🎯 Found Positions section:', text);
+           
+           // Look for a table near this element
+           let tableElement = element.querySelector('table');
+           if (!tableElement) {
+             // Check parent elements
+             let parent = element.parentElement;
+             for (let i = 0; i < 5 && parent; i++) {
+               tableElement = parent.querySelector('table');
+               if (tableElement) break;
+               parent = parent.parentElement;
+             }
+           }
+           if (!tableElement) {
+             // Check sibling elements
+             const siblings = element.parentElement?.children || [];
+             for (const sibling of siblings) {
+               tableElement = sibling.querySelector('table');
+               if (tableElement) break;
+             }
+           }
+           
+           if (tableElement) {
+             positionsTable = tableElement;
+             console.log('✅ Found positions table near Positions section');
+             break;
+           }
+         }
+       }
+       
+       // Define selectors with positions table priority
+       let possibleSelectors = [];
+       
+       if (positionsTable) {
+         // If we found the positions table, search there first
+         possibleSelectors = [
+           positionsTable.querySelectorAll('tbody tr'),
+           positionsTable.querySelectorAll('tr')
+         ];
+       } else {
+         // Fallback to general selectors
+         possibleSelectors = [
+           'table tbody tr',                          // Standard table rows
+           'table tr',                                // All table rows
+           '.position-row',                           // Custom position rows
+           '[data-testid*="position"]',               // Test ID attributes
+           '.futures-position',                       // Futures specific
+           '.position-item',                          // Position items
+           'tr[role="row"]',                          // Table rows with role
+           '[class*="position"]',                     // Any class containing position
+           '[class*="Position"]',                     // Any class containing Position
+           '[class*="table"] tr',                     // Table rows in any table class
+           '[class*="Table"] tr',                     // Table rows in any Table class
+           'div[role="row"]',                         // Div rows
+           '.ant-table-tbody tr',                     // Ant Design table rows
+           '.el-table__body tr',                      // Element UI table rows
+           '*[class*="order"]',                       // Order related classes
+           '*[class*="trade"]',                       // Trade related classes
+           '*[class*="row"]',                         // Any row classes
+           'tr',                                      // All table rows (last resort)
+           'div[class*="cell"]',                      // Div cells
+           'span[class*="cell"]'                      // Span cells
+         ];
+       }
       
-      let foundPositions = false;
-      
-      for (const selector of possibleSelectors) {
-        const rows = document.querySelectorAll(selector);
-        
-                 if (rows.length > 0) {
-           console.log(`📋 Found ${rows.length} potential position rows with selector: ${selector}`);
+             let foundPositions = false;
+       
+       for (let i = 0; i < possibleSelectors.length; i++) {
+         const selector = possibleSelectors[i];
+         let rows;
+         
+         if (positionsTable && i < 2) {
+           // First two entries are NodeLists from the positions table
+           rows = selector;
+         } else {
+           // String selectors
+           rows = document.querySelectorAll(selector);
+         }
+         
+         if (rows.length > 0) {
+           const selectorName = positionsTable && i < 2 ? 'positions-table-rows' : selector;
+           console.log(`📋 Found ${rows.length} potential position rows with selector: ${selectorName}`);
            
            if (DEBUG_MODE) {
              console.log(`🔍 DEBUG: Rows found:`, Array.from(rows).map(row => row.textContent?.trim()));
            }
            
-           rows.forEach((row, index) => {
-            try {
-              // Extract text content from all cells
-              const cells = row.querySelectorAll('td, .cell, [class*="cell"], [class*="col"]');
-              
-              if (cells.length >= 6) { // Minimum expected columns
-                const cellTexts = Array.from(cells).map(cell => 
-                  cell.textContent?.trim() || ''
-                ).filter(text => text && text !== '--' && text !== '-');
-                
-                // Try to identify the position data
-                const position = extractPositionFromCells(cellTexts);
-                
-                if (position && position.symbol) {
-                  positions.push(position);
-                  foundPositions = true;
-                  console.log(`✅ Position extracted: ${position.symbol} | ${position.qty} | PnL: ${position.unrealizedPnl}`);
-                }
-              }
-            } catch (error) {
-              console.warn(`⚠️ Error processing row ${index}:`, error);
-            }
-          });
+                      rows.forEach((row, index) => {
+             try {
+               // Extract text content from all cells
+               const cells = row.querySelectorAll('td, th, .cell, [class*="cell"], [class*="col"], span, div');
+               
+               if (cells.length >= 3) { // Lower minimum for BYDFI
+                 const cellTexts = Array.from(cells).map(cell => 
+                   cell.textContent?.trim() || ''
+                 ).filter(text => text && text !== '--' && text !== '-' && text !== '');
+                 
+                 if (DEBUG_MODE && cellTexts.length > 0) {
+                   console.log(`🔍 Row ${index}: [${cellTexts.join(' | ')}]`);
+                 }
+                 
+                 // Check if this row contains trading symbols (BYDFI specific)
+                 const hasSymbol = cellTexts.some(text => 
+                   /^[A-Z]{3,}\/[A-Z]{3,}$/i.test(text) || // AAVE/USDT format
+                   /^[A-Z]{3,}[A-Z]{3,}$/i.test(text) ||   // AAVEUSDT format  
+                   /^[A-Z]{3,}-[A-Z]{3,}$/i.test(text)     // AAVE-USDT format
+                 );
+                 
+                 const hasNumericData = cellTexts.some(text => 
+                   /^\d+\.?\d*$/i.test(text) || // Numbers
+                   /^[+-]?\d+\.?\d*\s*(USDT|USD)$/i.test(text) // PnL values
+                 );
+                 
+                 if (hasSymbol && hasNumericData) {
+                   console.log(`🎯 Found potential position row: [${cellTexts.join(' | ')}]`);
+                   
+                   // Try to extract position data using BYDFI-specific logic
+                   const position = extractBydfiPosition(cellTexts);
+                   
+                   if (position && position.symbol) {
+                     positions.push(position);
+                     foundPositions = true;
+                     console.log(`✅ BYDFI Position extracted: ${position.symbol} | ${position.qty} | PnL: ${position.unrealizedPnl}`);
+                   }
+                 }
+               }
+             } catch (error) {
+               console.warn(`⚠️ Error processing row ${index}:`, error);
+             }
+           });
           
           if (foundPositions) break; // Stop if we found positions
         }
@@ -400,6 +480,100 @@
       
     } catch (error) {
       console.error('❌ Error parsing position array:', error);
+      return null;
+    }
+  }
+
+  // Function to extract BYDFI-specific position data
+  function extractBydfiPosition(cellTexts) {
+    try {
+      console.log('🔍 BYDFI Position extraction from:', cellTexts);
+      
+      const position = {
+        symbol: '',
+        qty: '',
+        entryPrice: '',
+        markPrice: '',
+        liqPrice: '',
+        unrealizedPnl: '',
+        unrealizedRoi: '',
+        positionPnl: '',
+        timestamp: new Date().toISOString()
+      };
+      
+      // BYDFI-specific patterns
+      const symbolPattern = /^([A-Z]{3,})\/([A-Z]{3,})$/i; // AAVE/USDT
+      const symbolPattern2 = /^([A-Z]{3,})([A-Z]{3,})$/i;   // AAVEUSDT
+      const qtyPattern = /^[\d,]+\.?\d*\s*[A-Z]{3,}$/i;     // 13.18 AAVE
+      const pricePattern = /^[\d,]+\.?\d*$/;                // 298.01
+      const pnlPattern = /^[+-]?[\d,]+\.?\d*\s*(USDT|USD)$/i; // -2.36 USDT
+      const percentPattern = /^[+-]?\d+\.?\d*%$/;           // Percentage
+      
+      cellTexts.forEach((text, index) => {
+        console.log(`  Cell ${index}: "${text}"`);
+        
+        // Extract symbol (AAVE/USDT format)
+        if (symbolPattern.test(text)) {
+          const match = text.match(symbolPattern);
+          position.symbol = `${match[1]}${match[2]}`.toUpperCase(); // Convert to AAVEUSDT
+          console.log(`    ✅ Found symbol: ${position.symbol}`);
+        }
+        // Extract symbol (AAVEUSDT format) 
+        else if (symbolPattern2.test(text) && text.length >= 6) {
+          position.symbol = text.toUpperCase();
+          console.log(`    ✅ Found symbol: ${position.symbol}`);
+        }
+        // Extract quantity (13.18 AAVE)
+        else if (qtyPattern.test(text)) {
+          const qtyMatch = text.match(/^([\d,]+\.?\d*)/);
+          if (qtyMatch) {
+            position.qty = qtyMatch[1];
+            console.log(`    ✅ Found quantity: ${position.qty}`);
+          }
+        }
+        // Extract prices (entry, mark, liq)
+        else if (pricePattern.test(text) && parseFloat(text.replace(/,/g, '')) > 0) {
+          const price = text.replace(/,/g, '');
+          if (!position.entryPrice) {
+            position.entryPrice = price;
+            console.log(`    ✅ Found entry price: ${position.entryPrice}`);
+          } else if (!position.markPrice) {
+            position.markPrice = price;
+            console.log(`    ✅ Found mark price: ${position.markPrice}`);
+          } else if (!position.liqPrice) {
+            position.liqPrice = price;
+            console.log(`    ✅ Found liq price: ${position.liqPrice}`);
+          }
+        }
+        // Extract PnL (-2.36 USDT)
+        else if (pnlPattern.test(text)) {
+          const pnlMatch = text.match(/^([+-]?[\d,]+\.?\d*)/);
+          if (pnlMatch) {
+            position.unrealizedPnl = pnlMatch[1];
+            console.log(`    ✅ Found PnL: ${position.unrealizedPnl}`);
+          }
+        }
+        // Extract percentage
+        else if (percentPattern.test(text)) {
+          position.unrealizedRoi = text;
+          console.log(`    ✅ Found ROI: ${position.unrealizedRoi}`);
+        }
+      });
+      
+      // Fill in defaults
+      if (!position.qty) position.qty = '1.0';
+      if (!position.markPrice) position.markPrice = position.entryPrice;
+      if (!position.liqPrice) position.liqPrice = '0';
+      if (!position.unrealizedPnl) position.unrealizedPnl = '0';
+      if (!position.unrealizedRoi) position.unrealizedRoi = '0%';
+      position.positionPnl = position.unrealizedPnl;
+      
+      console.log('📊 Final position:', position);
+      
+      return position.symbol ? position : null;
+      
+    } catch (error) {
+      console.error('❌ Error parsing BYDFI position:', error);
       return null;
     }
   }
