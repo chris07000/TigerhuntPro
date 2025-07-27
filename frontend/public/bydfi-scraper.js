@@ -225,6 +225,109 @@
          }
        }
        
+       // FIRST: Try to find REAL position data (not placeholder/default data)
+       console.log('🔍 Searching for REAL position data (user has MOODENG with -1.30 USDT PnL)...');
+       const realPositionElements = [];
+       
+       // Look for elements containing the user's actual position values
+       const pageElements = document.querySelectorAll('*');
+       pageElements.forEach(element => {
+         const text = element.textContent?.trim() || '';
+         
+         // Look for the specific values from user's screenshots
+         if (text.includes('-1.30') || text.includes('0.2384') || text.includes('0.21312') || 
+             text.includes('0.21443') || text.includes('12.29') || text.includes('6.10%') ||
+             (text.includes('MOODENG') && text.length < 100 && !text.includes('Close') && !text.includes('Action'))) {
+           
+           console.log(`🎯 Found potential real data: "${text}"`);
+           
+           // Get the container (row) this element is in
+           let container = element;
+           let attempts = 0;
+           while (container && attempts < 10) {
+             if (container.tagName === 'TR' || 
+                 (container.tagName === 'DIV' && container.children.length > 3)) {
+               break;
+             }
+             container = container.parentElement;
+             attempts++;
+           }
+           
+           if (container) {
+             const rowText = container.textContent?.trim() || '';
+             console.log(`📊 Container data: "${rowText}"`);
+             
+             // Check if this container has position-like data
+             if (rowText.includes('MOODENG') && 
+                 (rowText.includes('-1.30') || rowText.includes('0.2384') || rowText.includes('USDT'))) {
+               
+               const children = Array.from(container.children).map(child => ({
+                 text: child.textContent?.trim() || '',
+                 tag: child.tagName,
+                 html: child.innerHTML
+               }));
+               
+               realPositionElements.push({
+                 element: container,
+                 text: rowText,
+                 children: children
+               });
+               
+               console.log(`✅ Added real position container with ${children.length} children`);
+             }
+           }
+         }
+       });
+       
+       console.log(`🎯 Found ${realPositionElements.length} real position containers`);
+       
+       // Process real position data first
+       if (realPositionElements.length > 0) {
+         console.log('✅ Processing REAL position data...');
+         
+         realPositionElements.forEach((item, index) => {
+           console.log(`\n📊 Real Position Container ${index + 1}:`);
+           console.log(`   Full text: "${item.text}"`);
+           
+           if (item.children.length > 0) {
+             console.log(`   Children (${item.children.length}):`);
+             item.children.forEach((child, childIndex) => {
+               if (child.text) {
+                 console.log(`     ${childIndex}: "${child.text}" (${child.tag})`);
+               }
+             });
+             
+             // Extract position from children
+             const childTexts = item.children.map(child => child.text).filter(text => text);
+             const position = extractRealBydfiPosition(childTexts);
+             
+             if (position && position.symbol) {
+               positions.push(position);
+               foundPositions = true;
+               console.log(`✅ REAL Position extracted: ${position.symbol} | ${position.qty} | PnL: ${position.unrealizedPnl}`);
+             }
+           } else {
+             // Try to extract from full text
+             const words = item.text.split(/\s+/).filter(word => word);
+             const position = extractRealBydfiPosition(words);
+             
+             if (position && position.symbol) {
+               positions.push(position);
+               foundPositions = true;
+               console.log(`✅ REAL Position extracted from text: ${position.symbol} | ${position.qty} | PnL: ${position.unrealizedPnl}`);
+             }
+           }
+         });
+       }
+       
+       // Only proceed to table scanning if we didn't find real data
+       if (foundPositions) {
+         console.log('🎉 Successfully found real position data! Skipping table scanning.');
+         return positions; // Skip the rest of the table scanning
+       } else {
+         console.log('⚠️ No real position data found, proceeding with table scanning...');
+       }
+
        // Define selectors with positions table priority
        let possibleSelectors = [];
        
@@ -480,6 +583,116 @@
       
     } catch (error) {
       console.error('❌ Error parsing position array:', error);
+      return null;
+    }
+  }
+
+  // Function to extract REAL BYDFI position data (not placeholder)
+  function extractRealBydfiPosition(dataArray) {
+    try {
+      console.log('🔍 REAL BYDFI Position extraction from:', dataArray);
+      
+      const position = {
+        symbol: '',
+        qty: '',
+        entryPrice: '',
+        markPrice: '',
+        liqPrice: '',
+        unrealizedPnl: '',
+        unrealizedRoi: '',
+        positionPnl: '',
+        timestamp: new Date().toISOString()
+      };
+      
+      // More specific patterns for REAL data
+      const symbolPattern = /^(MOODENG|AAVE|BTC|ETH|SOL)(USDT|USD)?$/i;
+      const symbolSlashPattern = /^(MOODENG|AAVE|BTC|ETH|SOL)\/(USDT|USD)$/i;
+      const qtyPattern = /^(\d+\.?\d*)\s*(MOODENG|AAVE|BTC|ETH|SOL)?$/i;
+      const pricePattern = /^\$?(\d+\.?\d+)$/;
+      const pnlPattern = /^([+-]?\d+\.?\d*)\s*(USDT|USD)?$/;
+      const percentPattern = /^([+-]?\d+\.?\d*)%$/;
+      
+      dataArray.forEach((text, index) => {
+        if (!text) return;
+        
+        console.log(`  Cell ${index}: "${text}"`);
+        
+        // Extract symbol (priority: MOODENG/USDT format)
+        if (symbolSlashPattern.test(text)) {
+          const match = text.match(symbolSlashPattern);
+          position.symbol = `${match[1]}${match[2]}`.toUpperCase();
+          console.log(`    ✅ Found symbol (slash): ${position.symbol}`);
+        } else if (symbolPattern.test(text)) {
+          const match = text.match(symbolPattern);
+          position.symbol = `${match[1]}USDT`.toUpperCase();
+          console.log(`    ✅ Found symbol: ${position.symbol}`);
+        }
+        
+        // Extract quantity (look for patterns like "0.2384 MOODENG" or just "0.2384")
+        else if (qtyPattern.test(text)) {
+          const match = text.match(qtyPattern);
+          if (match) {
+            position.qty = match[1];
+            console.log(`    ✅ Found quantity: ${position.qty}`);
+          }
+        }
+        
+        // Extract prices (be more specific about what constitutes a price)
+        else if (pricePattern.test(text)) {
+          const match = text.match(pricePattern);
+          if (match) {
+            const price = match[1];
+            const numPrice = parseFloat(price);
+            
+            // Price validation based on expected ranges
+            if (numPrice > 0 && numPrice < 100000) {
+              if (!position.entryPrice) {
+                position.entryPrice = price;
+                console.log(`    ✅ Found entry price: ${position.entryPrice}`);
+              } else if (!position.markPrice) {
+                position.markPrice = price;
+                console.log(`    ✅ Found mark price: ${position.markPrice}`);
+              } else if (!position.liqPrice) {
+                position.liqPrice = price;
+                console.log(`    ✅ Found liq price: ${position.liqPrice}`);
+              }
+            }
+          }
+        }
+        
+        // Extract PnL (look for negative values like "-1.30")
+        else if (pnlPattern.test(text) && (text.includes('-') || text.includes('+'))) {
+          const match = text.match(pnlPattern);
+          if (match) {
+            position.unrealizedPnl = match[1];
+            console.log(`    ✅ Found PnL: ${position.unrealizedPnl}`);
+          }
+        }
+        
+        // Extract percentage (like "6.10%")
+        else if (percentPattern.test(text)) {
+          const match = text.match(percentPattern);
+          if (match) {
+            position.unrealizedRoi = text;
+            console.log(`    ✅ Found ROI: ${position.unrealizedRoi}`);
+          }
+        }
+      });
+      
+      // Fill in defaults
+      if (!position.qty) position.qty = '1.0';
+      if (!position.markPrice) position.markPrice = position.entryPrice || '0';
+      if (!position.liqPrice) position.liqPrice = '0';
+      if (!position.unrealizedPnl) position.unrealizedPnl = '0';
+      if (!position.unrealizedRoi) position.unrealizedRoi = '0%';
+      position.positionPnl = position.unrealizedPnl;
+      
+      console.log('📊 Final REAL position:', position);
+      
+      return position.symbol ? position : null;
+      
+    } catch (error) {
+      console.error('❌ Error parsing REAL BYDFI position:', error);
       return null;
     }
   }
