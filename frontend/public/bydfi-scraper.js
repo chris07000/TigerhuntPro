@@ -8,6 +8,7 @@
   // Configuration
   const DASHBOARD_API = 'https://tigerhunt-pro-backend-k742.vercel.app/api/bydfi-positions';
   const SCRAPE_INTERVAL = 10000; // 10 seconds
+  const DEBUG_MODE = true; // Set to true for detailed logging
   
   let isRunning = false;
   let intervalId = null;
@@ -185,25 +186,43 @@
       
       const positions = [];
       
-      // Try different selectors that might contain position data
-      const possibleSelectors = [
-        'table tbody tr',           // Standard table rows
-        '.position-row',            // Custom position rows
-        '[data-testid*="position"]', // Test ID attributes
-        '.futures-position',        // Futures specific
-        '.position-item',           // Position items
-        'tr[role="row"]'            // Table rows with role
-      ];
+             // Enhanced selectors for BYDFI positions detection
+       const possibleSelectors = [
+         'table tbody tr',                    // Standard table rows
+         'table tr',                          // All table rows
+         '.position-row',                     // Custom position rows
+         '[data-testid*="position"]',         // Test ID attributes
+         '.futures-position',                 // Futures specific
+         '.position-item',                    // Position items
+         'tr[role="row"]',                    // Table rows with role
+         '[class*="position"]',               // Any class containing position
+         '[class*="Position"]',               // Any class containing Position
+         '[class*="table"] tr',               // Table rows in any table class
+         '[class*="Table"] tr',               // Table rows in any Table class
+         'div[role="row"]',                   // Div rows
+         '.ant-table-tbody tr',               // Ant Design table rows
+         '.el-table__body tr',                // Element UI table rows
+         '*[class*="order"]',                 // Order related classes
+         '*[class*="trade"]',                 // Trade related classes
+         '*[class*="row"]',                   // Any row classes
+         'tr',                                // All table rows
+         'div[class*="cell"]',                // Div cells
+         'span[class*="cell"]'                // Span cells
+       ];
       
       let foundPositions = false;
       
       for (const selector of possibleSelectors) {
         const rows = document.querySelectorAll(selector);
         
-        if (rows.length > 0) {
-          console.log(`📋 Found ${rows.length} potential position rows with selector: ${selector}`);
-          
-          rows.forEach((row, index) => {
+                 if (rows.length > 0) {
+           console.log(`📋 Found ${rows.length} potential position rows with selector: ${selector}`);
+           
+           if (DEBUG_MODE) {
+             console.log(`🔍 DEBUG: Rows found:`, Array.from(rows).map(row => row.textContent?.trim()));
+           }
+           
+           rows.forEach((row, index) => {
             try {
               // Extract text content from all cells
               const cells = row.querySelectorAll('td, .cell, [class*="cell"], [class*="col"]');
@@ -231,38 +250,99 @@
         }
       }
       
-      // If no positions found with table selectors, try alternative methods
-      if (!foundPositions) {
-        console.log('🔍 Trying alternative extraction methods...');
-        
-        // Look for "No Data" or empty state
-        const noDataElements = document.querySelectorAll('*');
-        for (const element of noDataElements) {
-          const text = element.textContent?.toLowerCase() || '';
-          if (text.includes('no data') || text.includes('no position') || text.includes('empty')) {
-            console.log('📭 No positions found (empty state detected)');
-            return [];
-          }
-        }
-        
-        // Try to find any elements that might contain position data
-        const allElements = document.querySelectorAll('*');
-        const potentialData = [];
-        
-        allElements.forEach(element => {
-          const text = element.textContent?.trim() || '';
-          // Look for cryptocurrency symbols
-          if (/^[A-Z]{3,}(USDT|USD|BTC|ETH)$/i.test(text)) {
-            potentialData.push(text);
-          }
-        });
-        
-        if (potentialData.length > 0) {
-          console.log('🔍 Potential symbols found:', potentialData);
-        }
-      }
+             // If no positions found with table selectors, try alternative methods
+       if (!foundPositions) {
+         console.log('🔍 Trying alternative extraction methods...');
+         
+         // Look for "No Data" or empty state first
+         const noDataElements = document.querySelectorAll('*');
+         let hasNoDataState = false;
+         
+         for (const element of noDataElements) {
+           const text = element.textContent?.toLowerCase() || '';
+           if (text.includes('no data') || text.includes('no position') || text.includes('empty') || 
+               text.includes('no active positions') || text.includes('no open positions')) {
+             console.log('📭 No positions found (empty state detected)');
+             hasNoDataState = true;
+             break;
+           }
+         }
+         
+         if (!hasNoDataState) {
+           // More aggressive search for position data
+           console.log('🔍 Scanning entire page for trading data...');
+           
+           const allElements = document.querySelectorAll('*');
+           const potentialPositions = [];
+           
+           allElements.forEach(element => {
+             const text = element.textContent?.trim() || '';
+             const innerHTML = element.innerHTML || '';
+             
+             // Look for cryptocurrency symbols
+             if (/^[A-Z]{3,}(USDT|USD|BTC|ETH)$/i.test(text)) {
+               console.log('🔍 Found potential symbol:', text);
+               
+               // Try to find surrounding data (parent/sibling elements)
+               const parent = element.parentElement;
+               const siblings = parent ? Array.from(parent.children) : [];
+               
+               const potentialData = [];
+               siblings.forEach(sibling => {
+                 const siblingText = sibling.textContent?.trim() || '';
+                 if (siblingText && siblingText !== text) {
+                   potentialData.push(siblingText);
+                 }
+               });
+               
+               if (potentialData.length > 3) { // If we have enough data around the symbol
+                 console.log('🎯 Found position data around symbol:', text, potentialData);
+                 
+                 // Try to create a position from this data
+                 const position = extractPositionFromArray([text, ...potentialData]);
+                 if (position && position.symbol) {
+                   potentialPositions.push(position);
+                   foundPositions = true;
+                 }
+               }
+             }
+             
+             // Look for Long/Short indicators
+             if (/^(Long|Short)\s+[A-Z]{3,}/i.test(text)) {
+               console.log('🔍 Found Long/Short position:', text);
+               // Extract position data from this context
+             }
+             
+             // Look for PnL patterns that might indicate positions
+             if (/[+-]\$?\d+\.\d{2}/.test(text) && !text.includes('Total') && !text.includes('Balance')) {
+               console.log('🔍 Found potential position PnL:', text);
+               // Try to find associated symbol
+             }
+           });
+           
+           if (potentialPositions.length > 0) {
+             console.log(`✅ Found ${potentialPositions.length} positions using alternative method`);
+             positions.push(...potentialPositions);
+           } else {
+             console.log('❌ No positions detected anywhere on page');
+           }
+         }
+       }
       
-      return positions;
+             // Summary of position extraction
+       console.log('📋 Position extraction summary:');
+       console.log(`🎯 Total positions found: ${positions.length}`);
+       if (positions.length > 0) {
+         positions.forEach((pos, index) => {
+           console.log(`📊 Position ${index + 1}: ${pos.symbol} | ${pos.qty} | Entry: $${pos.entryPrice} | PnL: $${pos.unrealizedPnl}`);
+         });
+       } else {
+         console.log('❌ No trading positions detected on this page');
+         console.log('💡 Make sure you are on the BYDFI Positions/Trading page');
+         console.log('💡 Try opening a position first to test the scraper');
+       }
+       
+       return positions;
       
     } catch (error) {
       console.error('❌ Error extracting positions:', error);
@@ -270,6 +350,60 @@
     }
   }
   
+  // Function to parse position data from array of texts
+  function extractPositionFromArray(dataArray) {
+    try {
+      const position = {
+        symbol: '',
+        qty: '',
+        entryPrice: '',
+        markPrice: '',
+        liqPrice: '',
+        unrealizedPnl: '',
+        unrealizedRoi: '',
+        positionPnl: '',
+        timestamp: new Date().toISOString()
+      };
+      
+      // Common patterns for different data
+      const symbolPattern = /^[A-Z]{3,}(USDT|USD|BTC|ETH)$/i;
+      const pricePattern = /^\$?[\d,]+\.?\d*$/;
+      const pnlPattern = /^[+-]?\$?[\d,]+\.?\d*$/;
+      const percentPattern = /^[+-]?\d+\.?\d*%$/;
+      const qtyPattern = /^\d+\.?\d*$/;
+      
+      dataArray.forEach((text) => {
+        if (symbolPattern.test(text)) {
+          position.symbol = text.toUpperCase();
+        } else if (qtyPattern.test(text) && !position.qty && parseFloat(text) > 0) {
+          position.qty = text;
+        } else if (pricePattern.test(text) && !position.entryPrice) {
+          position.entryPrice = text.replace(/[$,]/g, '');
+        } else if (pricePattern.test(text) && !position.markPrice && position.entryPrice) {
+          position.markPrice = text.replace(/[$,]/g, '');
+        } else if (pnlPattern.test(text) && !position.unrealizedPnl) {
+          position.unrealizedPnl = text.replace(/[$,]/g, '');
+        } else if (percentPattern.test(text)) {
+          position.unrealizedRoi = text;
+        }
+      });
+      
+      // Fill defaults
+      if (!position.qty) position.qty = '1.0';
+      if (!position.markPrice) position.markPrice = position.entryPrice;
+      if (!position.liqPrice) position.liqPrice = '0';
+      if (!position.unrealizedPnl) position.unrealizedPnl = '0';
+      if (!position.unrealizedRoi) position.unrealizedRoi = '0%';
+      position.positionPnl = position.unrealizedPnl;
+      
+      return position.symbol ? position : null;
+      
+    } catch (error) {
+      console.error('❌ Error parsing position array:', error);
+      return null;
+    }
+  }
+
   // Function to parse position data from cell texts
   function extractPositionFromCells(cellTexts) {
     try {
@@ -435,12 +569,75 @@
     console.log('✅ Scraper stopped');
   };
   
+  // Debug function to analyze page structure
+  window.debugBydfiPage = function() {
+    console.log('🔍 DEBUG: Analyzing BYDFI page structure...');
+    
+    // Find all tables
+    const tables = document.querySelectorAll('table');
+    console.log(`📊 Found ${tables.length} tables on page`);
+    
+    tables.forEach((table, index) => {
+      console.log(`Table ${index + 1}:`);
+      const rows = table.querySelectorAll('tr');
+      console.log(`  - ${rows.length} rows`);
+      rows.forEach((row, rowIndex) => {
+        const cells = row.querySelectorAll('td, th');
+        if (cells.length > 0) {
+          const cellTexts = Array.from(cells).map(cell => cell.textContent?.trim()).filter(text => text);
+          if (cellTexts.length > 0) {
+            console.log(`    Row ${rowIndex + 1}: [${cellTexts.join(' | ')}]`);
+          }
+        }
+      });
+    });
+    
+    // Find elements containing crypto symbols
+    console.log('🔍 Looking for crypto symbols...');
+    const allElements = document.querySelectorAll('*');
+    const cryptoSymbols = [];
+    
+    allElements.forEach(element => {
+      const text = element.textContent?.trim() || '';
+      if (/^[A-Z]{3,}(USDT|USD|BTC|ETH)$/i.test(text)) {
+        cryptoSymbols.push({
+          symbol: text,
+          element: element,
+          parent: element.parentElement?.textContent?.trim(),
+          siblings: Array.from(element.parentElement?.children || []).map(el => el.textContent?.trim()).filter(t => t)
+        });
+      }
+    });
+    
+    console.log(`🎯 Found ${cryptoSymbols.length} potential crypto symbols:`, cryptoSymbols);
+    
+    // Look for trading-related text
+    console.log('🔍 Looking for trading-related elements...');
+    const tradingElements = [];
+    
+    allElements.forEach(element => {
+      const text = element.textContent?.toLowerCase() || '';
+      if (text.includes('position') || text.includes('long') || text.includes('short') || 
+          text.includes('entry') || text.includes('profit') || text.includes('loss')) {
+        tradingElements.push({
+          text: element.textContent?.trim(),
+          className: element.className,
+          tag: element.tagName
+        });
+      }
+    });
+    
+    console.log(`📊 Found ${tradingElements.length} trading-related elements:`, tradingElements);
+  };
+  
   // Auto-start the scraper
   console.log('🎯 BYDFI Scraper loaded successfully!');
   console.log('📋 Commands:');
   console.log('  startBydfiScraper() - Start automatic scraping');
   console.log('  stopBydfiScraper()  - Stop automatic scraping');
+  console.log('  debugBydfiPage()    - Debug page structure');
   console.log('');
+  console.log('💡 If positions are not detected, try: debugBydfiPage()');
   console.log('🚀 Auto-starting scraper in 3 seconds...');
   
   setTimeout(() => {
