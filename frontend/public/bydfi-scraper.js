@@ -38,35 +38,99 @@
         'div:contains("USDT")'
       ];
       
-      // Try to find text patterns that look like balance/PnL
-      const allElements = document.querySelectorAll('*');
-      
-      allElements.forEach(element => {
-        const text = element.textContent?.trim() || '';
+             // ONLY look for Assets section - NOT Contract Details
+       let assetsSection = null;
+       
+       // Try multiple ways to find Assets section
+       const assetSelectors = [
+         '*[class*="asset"]',
+         '*:contains("Assets")',
+         '*:contains("Balance")',
+         '*[class*="balance"]',
+         '*[class*="pnl"]',
+         '*:contains("P&L")',
+         'div:contains("10,133.38")', // Your specific balance
+         'div:contains("0.00 USDT")'  // Your specific PnL
+       ];
+       
+       for (const selector of assetSelectors) {
+         try {
+           const elements = document.querySelectorAll(selector);
+           if (elements.length > 0) {
+             // Find the one that contains both balance and PnL
+             for (const element of elements) {
+               const text = element.textContent || '';
+               if (text.includes('USDT') && (text.includes('Balance') || text.includes('10,') || text.includes('0.00'))) {
+                 assetsSection = element;
+                 console.log('🎯 Found Assets section using selector:', selector);
+                 break;
+               }
+             }
+             if (assetsSection) break;
+           }
+         } catch (e) {
+           // Ignore selector errors
+         }
+       }
+       
+       let elementsToSearch = [];
+       
+       if (assetsSection) {
+         // If we found Assets section, only search within it
+         elementsToSearch = assetsSection.querySelectorAll('*');
+         console.log('🎯 Found Assets section, searching within it only');
+       } else {
+         // Fallback: search all but be more specific
+         elementsToSearch = document.querySelectorAll('*');
+         console.log('⚠️ Assets section not found, using fallback search');
+       }
+       
+       // Track what we find to avoid Contract Details
+       let foundBalance = false;
+       let foundPnL = false;
+       
+       elementsToSearch.forEach(element => {
+         const text = element.textContent?.trim() || '';
+         const parentText = element.parentElement?.textContent?.toLowerCase() || '';
+         
+         // SKIP if it's in Contract Details section
+         if (parentText.includes('contract') || parentText.includes('index') || 
+             parentText.includes('mark') || parentText.includes('volume') ||
+             text.includes('Index') || text.includes('Mark') || text.includes('Volume')) {
+           return; // Skip Contract Details
+         }
+         
+         // Look for balance ONLY in Assets context
+         if (!foundBalance && /^\d{1,3}(,\d{3})*(\.\d{2})?\s*(USDT|USD)$/i.test(text)) {
+           // Check if this is likely the main balance (usually the largest value in Assets)
+           if (parentText.includes('balance') || parentText.includes('asset')) {
+             const value = text.replace(/[,$A-Za-z\s]/g, '');
+             accountData.balance = value;
+             foundBalance = true;
+             console.log('💰 Found balance in Assets section:', value);
+           }
+         }
+         
+         // Look for PnL - more specific patterns
+         if (!foundPnL && /^[+-]?\d+(\.\d{2})?\s*(USDT|USD)?$/i.test(text)) {
+           // Check if this is likely PnL (near "PnL" text or in Assets section)
+           if (parentText.includes('pnl') || parentText.includes('p&l') || 
+               (parentText.includes('asset') && text.includes('0.00'))) {
+             const value = text.replace(/[A-Za-z\s]/g, '');
+             accountData.pnl = value;
+             foundPnL = true;
+             console.log('📊 Found PnL in Assets section:', value);
+           }
+         }
         
-        // Look for balance (like "10,193.38 USDT")
-        if (/^\d{1,3}(,\d{3})*(\.\d{2})?\s*(USDT|USD)$/i.test(text)) {
-          const value = text.replace(/[,$A-Za-z\s]/g, '');
-          if (parseFloat(value) > parseFloat(accountData.balance)) {
-            accountData.balance = value;
-            console.log('💰 Found balance:', value);
-          }
-        }
-        
-        // Look for PnL (like "+123.45" or "-67.89")
-        if (/^[+-]?\d+(\.\d{2})?\s*(USDT|USD)?$/i.test(text)) {
-          const value = text.replace(/[A-Za-z\s]/g, '');
-          if (Math.abs(parseFloat(value)) > 0) {
-            accountData.pnl = value;
-            console.log('📊 Found PnL:', value);
-          }
-        }
-        
-        // Look for percentage (margin ratio)
-        if (/^\d+(\.\d{2})?%$/i.test(text)) {
-          accountData.marginRatio = text;
-          console.log('📋 Found margin ratio:', text);
-        }
+                 // Look for percentage (margin ratio) - but NOT from Contract Details
+         if (/^\d+(\.\d{2})?%$/i.test(text)) {
+           // Only accept if it's NOT in contract details and is a small percentage (margin ratios are usually small)
+           if (!parentText.includes('contract') && !parentText.includes('volume') && parseFloat(text) < 50) {
+             accountData.marginRatio = text;
+             console.log('📋 Found margin ratio:', text);
+           }
+         }
         
         // Look for VIP level
         if (/^VIP\s*\d+$/i.test(text)) {
@@ -92,7 +156,15 @@
         }
       });
       
-      return accountData;
+             // Summary of what we found
+       console.log('📋 Assets extraction summary:');
+       console.log(`💰 Balance: ${accountData.balance} USDT`);
+       console.log(`📊 PnL: ${accountData.pnl} USDT`);
+       console.log(`⚖️ Margin Ratio: ${accountData.marginRatio}`);
+       console.log(`⭐ VIP Level: ${accountData.vipLevel}`);
+       console.log('🚫 Contract Details SKIPPED (Index Price, Mark, Volume)');
+       
+       return accountData;
       
     } catch (error) {
       console.error('❌ Error extracting account data:', error);
