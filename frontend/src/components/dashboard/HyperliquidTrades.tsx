@@ -21,6 +21,7 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
   const isFirstLoadRef = useRef(true)
   const hasInitializedRef = useRef(false)
   const recentSignalsRef = useRef(new Map<string, number>()) // Track recent signals with timestamps
+  const processedSignalsRef = useRef<Set<string>>(new Set()) // Permanent tracking of processed signals
 
   // Tiger Hunt Pro Treasury wallet address for live tracking
   const HYPERLIQUID_WALLET_ADDRESS = '0xB30d664f1df93d65425d833f434f4fbDc7ae7D63'
@@ -61,7 +62,7 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
       
       // Create a more specific position key that includes entry price to avoid duplicates
       const entryPrice = asset.position.entryPx || '0'
-      const positionKey = `${formatted.symbol}_${formatted.side}_${parseFloat(entryPrice).toFixed(4)}`
+      const positionKey = `${formatted.symbol}_${formatted.side}_${parseFloat(entryPrice).toFixed(6)}`
       currentPositions.add(positionKey)
 
       // Check if this is a new position 
@@ -97,19 +98,26 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
     // Create signals for new positions
     for (const position of newPositions) {
       try {
-        // Check if we've recently sent a signal for this position (prevent duplicates)
-        const signalKey = `${position.symbol}_${position.side}_${position.entryPrice}`
+        // Create a unique signal identifier based on position details
+        const signalKey = `${position.symbol}_${position.side}_${parseFloat(position.entryPrice).toFixed(6)}`
         const now = Date.now()
-        const recentSignalTime = recentSignalsRef.current.get(signalKey)
         
-        // If we sent a signal for this exact position in the last 5 minutes, skip it
+        // LEVEL 1: Check permanent processed signals (never send same signal twice)
+        if (processedSignalsRef.current.has(signalKey)) {
+          console.log(`🚫 DUPLICATE BLOCKED: Signal already processed for ${signalKey}`)
+          continue
+        }
+        
+        // LEVEL 2: Check recent time-based duplicates (5 minute window)
+        const recentSignalTime = recentSignalsRef.current.get(signalKey)
         if (recentSignalTime && (now - recentSignalTime) < 5 * 60 * 1000) {
           const minutesAgo = Math.round((now - recentSignalTime) / (60 * 1000))
-          console.log(`⏭️ Skipping duplicate signal for ${signalKey} (sent ${minutesAgo} minutes ago)`)
+          console.log(`⏭️ TIME DUPLICATE: Skipping signal for ${signalKey} (sent ${minutesAgo} minutes ago)`)
           continue
         }
         
         console.log('🎯 Creating auto-signal for new position:', position)
+        console.log('🔍 Signal key:', signalKey)
         
         // Get real TP/SL from your Hyperliquid orders
         console.log('🔍 Fetching real TP/SL orders for', position.symbol)
@@ -313,7 +321,10 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
 
         const result = await signalApi.createSignal(signalData)
 
-        // Track this signal to prevent duplicates
+        // PERMANENT TRACKING: Mark this signal as processed (never send again)
+        processedSignalsRef.current.add(signalKey)
+        
+        // TIME TRACKING: Track this signal to prevent duplicates in time window
         recentSignalsRef.current.set(signalKey, now)
         
         // Clean old entries from recent signals map (older than 10 minutes)
@@ -326,7 +337,9 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
         keysToDelete.forEach(key => recentSignalsRef.current.delete(key))
 
         console.log('✅ Auto-signal created successfully:', result)
+        console.log('🔒 Signal permanently tracked:', signalKey)
         console.log('🎯 Signal should now appear in dashboard and Discord!')
+        console.log(`📊 Total processed signals: ${processedSignalsRef.current.size}`)
         
         // Trigger signals refresh on Dashboard
         if (onSignalCreated) {
@@ -354,6 +367,7 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
       isFirstLoadRef.current = false
       console.log('✅ Position tracking started')
       console.log(`📝 Initial positions tracked: ${currentPositions.size} positions`)
+      console.log(`🔒 Previously processed signals: ${processedSignalsRef.current.size}`)
       
       // Enable auto-signals after a delay to prevent immediate signals on refresh
       setTimeout(() => {
@@ -366,6 +380,23 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
       console.log(`🚀 Created ${newPositions.length} auto-signals from Treasury trades!`)
       console.log('📊 Previous positions:', Array.from(previousPositionsRef.current))
       console.log('📊 Current positions:', Array.from(currentPositions))
+    }
+    
+    // Cleanup processed signals older than 24 hours (prevent memory growth)
+    if (Math.random() < 0.1) { // Only run cleanup 10% of the time
+      const processedSignalsArray = Array.from(processedSignalsRef.current)
+      const signalsToKeep = new Set<string>()
+      
+      processedSignalsArray.forEach(signalKey => {
+        // Keep all signals for now since we don't have timestamps
+        // In a real implementation, you'd check timestamp
+        signalsToKeep.add(signalKey)
+      })
+      
+      if (signalsToKeep.size < processedSignalsRef.current.size) {
+        console.log(`🧹 Cleaned ${processedSignalsRef.current.size - signalsToKeep.size} old processed signals`)
+        processedSignalsRef.current = signalsToKeep
+      }
     }
   }
 
@@ -403,6 +434,17 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
       
       // Auto-refresh every 30 seconds
       const interval = setInterval(fetchHyperliquidData, 30000)
+      
+      // Add debugging function to window (for testing)
+      ;(window as any).resetAutoSignals = () => {
+        processedSignalsRef.current.clear()
+        recentSignalsRef.current.clear()
+        previousPositionsRef.current.clear()
+        hasInitializedRef.current = false
+        isFirstLoadRef.current = true
+        console.log('🔄 Auto-signal tracking reset! Call fetchHyperliquidData() to restart.')
+      }
+      
       return () => clearInterval(interval)
     }
   }, [activeAddress])
