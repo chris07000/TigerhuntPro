@@ -52,28 +52,7 @@ class OrdinalsService {
     error?: string
   }> {
     try {
-      // TEMPORARY: Allow specific addresses for testing (REMOVE AFTER TESTING)
-      const testAddresses: string[] = [
-        // Add specific addresses here for testing if needed
-      ]
-      
-      if (testAddresses.includes(address)) {
-        console.log('🧪 TEST ACCESS: Allowing specific address for testing')
-        return {
-          hasValidTiger: true,
-          tigerOrdinals: [{
-            id: 'test-tiger-inscription',
-            number: 99999,
-            address: address,
-            content_type: 'image/png',
-            genesis_height: 800000,
-            timestamp: Date.now(),
-            content: 'test-tiger-content',
-            preview: 'test-tiger-preview'
-          }],
-          totalInscriptions: 1
-        }
-      }
+
       
       // Check Tiger ownership with configured IDs
       const allInscriptions = await this.fetchAllInscriptions(address)
@@ -115,31 +94,50 @@ class OrdinalsService {
   }
 
   /**
-   * Fetch alle inscriptions voor een address
+   * Fetch inscriptions voor een address (CONSERVATIVE APPROACH)
    */
   private async fetchAllInscriptions(address: string): Promise<Inscription[]> {
     try {
-      // Fetch ALL inscriptions with pagination
       let allInscriptions: any[] = []
       let offset = 0
       const limit = 60
       let hasMore = true
+      const maxInscriptions = 300 // Conservative limit to avoid API abuse
       
-      console.log(`🔍 Fetching ALL inscriptions for ${address}...`)
+      console.log(`🔍 Fetching inscriptions for ${address}... (max ${maxInscriptions})`)
       
-      while (hasMore && offset < 1000) { // Safety limit of 1000 inscriptions
-        const response = await axios.get(`https://api.hiro.so/ordinals/v1/inscriptions`, {
-          params: { address, limit, offset },
-          timeout: 10000
-        })
-        
-        if (response.data?.results && response.data.results.length > 0) {
-          allInscriptions.push(...response.data.results)
-          offset += limit
-          hasMore = response.data.results.length === limit
+      while (hasMore && offset < maxInscriptions) {
+        try {
+          const response = await axios.get(`https://api.hiro.so/ordinals/v1/inscriptions`, {
+            params: { address, limit, offset },
+            timeout: 8000 // Shorter timeout
+          })
           
-          console.log(`📡 Fetched batch: ${response.data.results.length} inscriptions (total: ${allInscriptions.length})`)
-        } else {
+          if (response.data?.results && response.data.results.length > 0) {
+            allInscriptions.push(...response.data.results)
+            offset += limit
+            hasMore = response.data.results.length === limit
+            
+            console.log(`📡 Batch ${Math.floor(offset/limit)}: +${response.data.results.length} (total: ${allInscriptions.length})`)
+            
+            // RATE LIMITING: Wait between requests to be nice to Hiro API
+            if (hasMore) {
+              await new Promise(resolve => setTimeout(resolve, 1500))
+            }
+          } else {
+            hasMore = false
+          }
+        } catch (batchError: any) {
+          console.warn(`⚠️ Batch ${Math.floor(offset/limit)} failed:`, batchError.message)
+          
+          // If rate limited, try longer delay
+          if (batchError.response?.status === 429) {
+            console.log('🛑 API rate limit hit, waiting 5s...')
+            await new Promise(resolve => setTimeout(resolve, 5000))
+            continue // Retry this batch
+          }
+          
+          // For other errors, stop fetching
           hasMore = false
         }
       }
@@ -162,17 +160,21 @@ class OrdinalsService {
       return []
       
     } catch (error: any) {
-      console.warn('❌ Hiro API failed, trying OrdAPI fallback...', error.message)
+      console.warn('❌ Hiro API failed completely, trying OrdAPI fallback...', error.message)
       
-      // Fallback to OrdAPI
+      // Fallback to OrdAPI (only if Hiro completely fails)
       try {
+        console.log('📡 Trying OrdAPI fallback...')
         const response = await axios.get(`https://ordapi.xyz/address/${address}/inscriptions`, {
-          timeout: 15000 // Longer timeout for potentially large response
+          timeout: 10000
         })
         
         if (response.data && Array.isArray(response.data)) {
-          console.log(`✅ OrdAPI fallback: ${response.data.length} inscriptions`)
-          return response.data.map((item: any) => ({
+          // Limit OrdAPI results too
+          const limitedResults = response.data.slice(0, 300)
+          console.log(`✅ OrdAPI fallback: ${limitedResults.length} inscriptions (limited from ${response.data.length})`)
+          
+          return limitedResults.map((item: any) => ({
             id: item.id || item.inscription_id,
             number: item.inscription_number || item.number,
             address: address,
@@ -198,13 +200,13 @@ class OrdinalsService {
     const tigerMatches = inscriptions.filter(inscription => {
       // Check exact Tiger ID match (primary method)
       if (this.tigerCollectionIds.has(inscription.id)) {
-        console.log(`✅ Exact ID match found: ${inscription.id}`)
+        console.log(`✅ Exact ID match: ${inscription.id.substring(0,12)}...`)
         return true
       }
       
       // Check parent inscription ID
       if (this.tigerParentId && inscription.parent === this.tigerParentId) {
-        console.log(`✅ Parent ID match found: ${inscription.id}`)
+        console.log(`✅ Parent ID match: ${inscription.id.substring(0,12)}...`)
         return true
       }
       
@@ -212,7 +214,7 @@ class OrdinalsService {
       if (this.tigerNumberRange && inscription.number) {
         const { min, max } = this.tigerNumberRange
         if (inscription.number >= min && inscription.number <= max) {
-          console.log(`✅ Number range match found: #${inscription.number}`)
+          console.log(`✅ Number range match: #${inscription.number}`)
           return true
         }
       }
@@ -243,7 +245,7 @@ class OrdinalsService {
                               (content.includes('tiger') || preview.includes('tiger'))
       
       if (hasTimerPattern || isImageWithTiger) {
-        console.log(`🐅 Content match found: ${inscription.id} (${contentType})`)
+        console.log(`🐅 Content match: ${inscription.id.substring(0,12)}... (${contentType})`)
         return true
       }
       

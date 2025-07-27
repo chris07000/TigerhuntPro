@@ -95,22 +95,31 @@ export interface PortfolioAnalytics {
   };
 }
 
+// Create axios instance with proper baseURL
+const api = axios.create({
+  baseURL: process.env.NODE_ENV === 'production' ? 'https://tigerhunt-pro-backend-k742.vercel.app/api' : `${API_BASE_URL}/api`,
+  timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+})
+
 const tradeApi = {
   // Create trade from signal
   createTradeFromSignal: async (data: CreateTradeFromSignalRequest): Promise<Trade> => {
-    const response = await axios.post(`${API_BASE_URL}/api/trades/from-signal`, data);
+    const response = await api.post('/trades/from-signal', data);
     return response.data.data;
   },
 
   // Create manual trade
   createManualTrade: async (data: CreateManualTradeRequest): Promise<Trade> => {
-    const response = await axios.post(`${API_BASE_URL}/api/trades/manual`, data);
+    const response = await api.post('/trades/manual', data);
     return response.data.data;
   },
 
   // Close trade
   closeTrade: async (tradeId: string, data: CloseTradeRequest): Promise<Trade> => {
-    const response = await axios.put(`${API_BASE_URL}/api/trades/${tradeId}/close`, data);
+    const response = await api.put(`/trades/${tradeId}/close`, data);
     return response.data.data;
   },
 
@@ -123,7 +132,7 @@ const tradeApi = {
     limit?: number;
     offset?: number;
   }): Promise<{ data: Trade[]; total: number }> => {
-    const response = await axios.get(`${API_BASE_URL}/api/trades`, { params });
+    const response = await api.get('/trades', { params });
     return {
       data: response.data.data,
       total: response.data.total
@@ -132,7 +141,7 @@ const tradeApi = {
 
   // Get portfolio analytics
   getPortfolioAnalytics: async (timeframe: '7d' | '30d' | '90d' | '1y' = '30d'): Promise<PortfolioAnalytics> => {
-    const response = await axios.get(`${API_BASE_URL}/api/trades/analytics`, {
+    const response = await api.get('/trades/analytics', {
       params: { timeframe }
     });
     return response.data.data;

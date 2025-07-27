@@ -1,9 +1,34 @@
 // TIGER HUNT PRO BACKEND - FULL FUNCTIONALITY
 const axios = require('axios');
 
-// In-memory storage for signals (production should use database)
+// Persistent signal storage with timestamps (serverless-friendly)
 let signals = [];
 let signalCounter = 1;
+const SIGNAL_RETENTION_HOURS = 24; // Keep signals for 24 hours
+
+// Helper function to clean old signals
+const cleanOldSignals = () => {
+  const cutoffTime = Date.now() - (SIGNAL_RETENTION_HOURS * 60 * 60 * 1000);
+  const initialCount = signals.length;
+  signals = signals.filter(signal => {
+    const signalTime = new Date(signal.createdAt).getTime();
+    return signalTime > cutoffTime;
+  });
+  
+  if (signals.length < initialCount) {
+    console.log(`🧹 Cleaned ${initialCount - signals.length} old signals (older than ${SIGNAL_RETENTION_HOURS}h)`);
+  }
+};
+
+// Auto-cleanup old signals on every request
+const ensureSignalCleanup = () => {
+  // Only cleanup every 10 minutes to avoid excessive cleanup
+  const now = Date.now();
+  if (!global.lastCleanup || (now - global.lastCleanup) > 10 * 60 * 1000) {
+    cleanOldSignals();
+    global.lastCleanup = now;
+  }
+};
 
 // Discord Service Class
 class DiscordService {
@@ -148,6 +173,9 @@ module.exports = async (req, res) => {
   }
 
   if (url.startsWith('/api/signals') || url.startsWith('/signals')) {
+    // Ensure signals are cleaned up before processing
+    ensureSignalCleanup();
+    
     if (method === 'GET') {
       return res.status(200).json({
         success: true,

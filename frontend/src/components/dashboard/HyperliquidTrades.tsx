@@ -20,6 +20,7 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
   const previousPositionsRef = useRef<Set<string>>(new Set())
   const isFirstLoadRef = useRef(true)
   const hasInitializedRef = useRef(false)
+  const recentSignalsRef = useRef(new Map<string, number>()) // Track recent signals with timestamps
 
   // Tiger Hunt Pro Treasury wallet address for live tracking
   const HYPERLIQUID_WALLET_ADDRESS = '0xB30d664f1df93d65425d833f434f4fbDc7ae7D63'
@@ -35,7 +36,8 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
         autoSignalEnabled,
         positionsCount: currentSummary.assetPositions?.length || 0,
         forceSignals,
-        hasInitialized: hasInitializedRef.current
+        hasInitialized: hasInitializedRef.current,
+        previousPositionsCount: previousPositionsRef.current.size
       })
     }
 
@@ -56,23 +58,29 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
     // Process current positions
     currentSummary.assetPositions.forEach(asset => {
       const formatted = hyperliquidApi.formatPosition(asset.position)
-      const positionKey = `${formatted.symbol}_${formatted.side}`
+      
+      // Create a more specific position key that includes entry price to avoid duplicates
+      const entryPrice = asset.position.entryPx || '0'
+      const positionKey = `${formatted.symbol}_${formatted.side}_${parseFloat(entryPrice).toFixed(4)}`
       currentPositions.add(positionKey)
 
-              // Check if this is a new position 
-        // Only create signals for truly NEW positions after initialization
-        const isNewPosition = !previousPositionsRef.current.has(positionKey)
-        const shouldCreateSignal = forceSignals || (isNewPosition && hasInitializedRef.current)
+      // Check if this is a new position 
+      // Only create signals for truly NEW positions after initialization
+      const isNewPosition = !previousPositionsRef.current.has(positionKey)
+      const shouldCreateSignal = forceSignals || (isNewPosition && hasInitializedRef.current)
 
-        // Only log position details if it's a new position or forced
-        if (shouldCreateSignal || forceSignals) {
-          console.log('📊 Position detected:', {
-            symbol: formatted.symbol,
-            side: formatted.side,
-            isNewPosition,
-            shouldCreateSignal
-          })
-        }
+      // Only log position details if it's a new position or forced
+      if (shouldCreateSignal || forceSignals) {
+        console.log('📊 Position detected:', {
+          symbol: formatted.symbol,
+          side: formatted.side,
+          entryPrice: entryPrice,
+          positionKey: positionKey,
+          isNewPosition,
+          shouldCreateSignal,
+          inPreviousSet: previousPositionsRef.current.has(positionKey)
+        })
+      }
       
       if (shouldCreateSignal) {
         newPositions.push({
@@ -80,7 +88,7 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
           rawSymbol: asset.position.coin || formatted.symbol,
           side: formatted.side as 'LONG' | 'SHORT',
           size: formatted.size,
-          entryPrice: asset.position.entryPx || '0',
+          entryPrice: entryPrice,
           leverage: formatted.leverage.toString()
         })
       }
@@ -89,6 +97,18 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
     // Create signals for new positions
     for (const position of newPositions) {
       try {
+        // Check if we've recently sent a signal for this position (prevent duplicates)
+        const signalKey = `${position.symbol}_${position.side}_${position.entryPrice}`
+        const now = Date.now()
+        const recentSignalTime = recentSignalsRef.current.get(signalKey)
+        
+        // If we sent a signal for this exact position in the last 5 minutes, skip it
+        if (recentSignalTime && (now - recentSignalTime) < 5 * 60 * 1000) {
+          const minutesAgo = Math.round((now - recentSignalTime) / (60 * 1000))
+          console.log(`⏭️ Skipping duplicate signal for ${signalKey} (sent ${minutesAgo} minutes ago)`)
+          continue
+        }
+        
         console.log('🎯 Creating auto-signal for new position:', position)
         
         // Get real TP/SL from your Hyperliquid orders
@@ -293,6 +313,18 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
 
         const result = await signalApi.createSignal(signalData)
 
+        // Track this signal to prevent duplicates
+        recentSignalsRef.current.set(signalKey, now)
+        
+        // Clean old entries from recent signals map (older than 10 minutes)
+        const keysToDelete: string[] = []
+        recentSignalsRef.current.forEach((timestamp, key) => {
+          if (now - timestamp > 10 * 60 * 1000) {
+            keysToDelete.push(key)
+          }
+        })
+        keysToDelete.forEach(key => recentSignalsRef.current.delete(key))
+
         console.log('✅ Auto-signal created successfully:', result)
         console.log('🎯 Signal should now appear in dashboard and Discord!')
         
@@ -321,17 +353,20 @@ export default function HyperliquidTrades({ walletAddress, onSignalCreated }: Hy
     if (isFirstLoadRef.current) {
       isFirstLoadRef.current = false
       console.log('✅ Position tracking started')
+      console.log(`📝 Initial positions tracked: ${currentPositions.size} positions`)
+      
       // Enable auto-signals after a delay to prevent immediate signals on refresh
       setTimeout(() => {
         hasInitializedRef.current = true
-        console.log('✅ Auto-signal detection ready')
-      }, 5000) // 5 second delay
+        console.log('✅ Auto-signal detection ready - future new positions will trigger signals')
+      }, 10000) // 10 second delay to ensure stability
     }
 
     if (newPositions.length > 0) {
       console.log(`🚀 Created ${newPositions.length} auto-signals from Treasury trades!`)
+      console.log('📊 Previous positions:', Array.from(previousPositionsRef.current))
+      console.log('📊 Current positions:', Array.from(currentPositions))
     }
-    // Removed "No new positions detected" to reduce console spam
   }
 
 
