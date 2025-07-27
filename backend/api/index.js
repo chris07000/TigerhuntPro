@@ -6,6 +6,10 @@ let signals = [];
 let signalCounter = 1;
 const SIGNAL_RETENTION_HOURS = 24; // Keep signals for 24 hours
 
+// BYDFI positions storage
+let bydfiPositions = [];
+let bydfiLastUpdate = null;
+
 // Helper function to clean old signals
 const cleanOldSignals = () => {
   const cutoffTime = Date.now() - (SIGNAL_RETENTION_HOURS * 60 * 60 * 1000);
@@ -260,6 +264,63 @@ module.exports = async (req, res) => {
         return res.status(404).json({
           success: false,
           message: `Signal ${signalId} not found`
+        });
+      }
+    }
+  }
+
+  // BYDFI Positions Endpoint
+  if (url.startsWith('/api/bydfi-positions') || url.startsWith('/bydfi-positions')) {
+    if (method === 'GET') {
+      // Return stored BYDFI positions
+      return res.status(200).json({
+        success: true,
+        positions: bydfiPositions || [],
+        lastUpdate: bydfiLastUpdate || null
+      });
+    }
+    
+    if (method === 'POST') {
+      try {
+        let body = req.body;
+        if (typeof body === 'string') {
+          body = JSON.parse(body);
+        }
+
+        // Store BYDFI positions data
+        if (Array.isArray(body)) {
+          bydfiPositions = body.map((pos, index) => ({
+            id: `bydfi_${Date.now()}_${index}`,
+            symbol: pos.symbol || '',
+            qty: pos.qty || '0',
+            entryPrice: pos.entryPrice || '0',
+            markPrice: pos.markPrice || '0',
+            liqPrice: pos.liqPrice || '0',
+            unrealizedPnl: pos.unrealizedPnl || '0',
+            unrealizedRoi: pos.unrealizedRoi || '0%',
+            positionPnl: pos.positionPnl || '0',
+            timestamp: new Date().toISOString()
+          }));
+          bydfiLastUpdate = new Date().toISOString();
+          
+          console.log(`📊 BYDFI positions updated: ${bydfiPositions.length} positions`);
+          
+          return res.status(200).json({
+            success: true,
+            message: `Updated ${bydfiPositions.length} BYDFI positions`,
+            positions: bydfiPositions
+          });
+        } else {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid data format. Expected array of positions.'
+          });
+        }
+      } catch (error) {
+        console.error('❌ BYDFI positions update failed:', error.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to update BYDFI positions'
         });
       }
     }

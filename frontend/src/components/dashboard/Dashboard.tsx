@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react'
 import { useWebSocket } from '@/hooks/useWebSocket'
 import SignalList from './SignalList'
 import RealTimeStatus from './RealTimeStatus'
-import HyperliquidTrades from './HyperliquidTrades'
+import BydfiTrades from './BydfiTrades'
 import { Signal } from '@/types/signal'
 import tradeApi, { Trade, PortfolioAnalytics, CreateTradeFromSignalRequest } from '@/services/tradeApi'
 
@@ -287,7 +287,7 @@ export default function Dashboard() {
       <div className="main-content">
         <div className="container mx-auto px-6">
           {/* Hyperliquid Trades - Full Width */}
-          <HyperliquidTrades onSignalCreated={refreshSignals} />
+          <BydfiTrades onSignalCreated={refreshSignals} />
           
           <div className="charts-grid">
             {/* Signals List */}
