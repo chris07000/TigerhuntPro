@@ -10,6 +10,10 @@ const SIGNAL_RETENTION_HOURS = 24; // Keep signals for 24 hours
 let bydfiPositions = [];
 let bydfiLastUpdate = null;
 
+// BYDFI account data storage
+let bydfiAccountData = null;
+let bydfiAccountLastUpdate = null;
+
 // Helper function to clean old signals
 const cleanOldSignals = () => {
   const cutoffTime = Date.now() - (SIGNAL_RETENTION_HOURS * 60 * 60 * 1000);
@@ -321,6 +325,56 @@ module.exports = async (req, res) => {
         return res.status(500).json({
           success: false,
           error: 'Failed to update BYDFI positions'
+        });
+      }
+    }
+  }
+
+  // BYDFI Account Data Endpoint
+  if (url.startsWith('/api/bydfi-account') || url.startsWith('/bydfi-account')) {
+    if (method === 'GET') {
+      // Return stored BYDFI account data
+      return res.status(200).json({
+        success: true,
+        account: bydfiAccountData || null,
+        lastUpdate: bydfiAccountLastUpdate || null
+      });
+    }
+    
+    if (method === 'POST') {
+      try {
+        let body = req.body;
+        if (typeof body === 'string') {
+          body = JSON.parse(body);
+        }
+
+        // Store BYDFI account data
+        bydfiAccountData = {
+          balance: body.balance || '0',
+          pnl: body.pnl || '0',
+          marginRatio: body.marginRatio || '0.00%',
+          maintenanceMargin: body.maintenanceMargin || '0',
+          marginBalance: body.marginBalance || '0',
+          vipLevel: body.vipLevel || '0',
+          makerFee: body.makerFee || '0.02%',
+          takerFee: body.takerFee || '0.06%',
+          timestamp: new Date().toISOString()
+        };
+        bydfiAccountLastUpdate = new Date().toISOString();
+        
+        console.log(`💰 BYDFI account data updated: Balance ${bydfiAccountData.balance} USDT, PnL ${bydfiAccountData.pnl} USDT`);
+        
+        return res.status(200).json({
+          success: true,
+          message: 'BYDFI account data updated successfully',
+          account: bydfiAccountData
+        });
+
+      } catch (error) {
+        console.error('❌ BYDFI account data update failed:', error.message);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to update BYDFI account data'
         });
       }
     }

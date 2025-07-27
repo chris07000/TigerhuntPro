@@ -15,6 +15,18 @@ interface BydfiPosition {
   timestamp: string
 }
 
+interface BydfiAccountData {
+  balance: string
+  pnl: string
+  marginRatio: string
+  maintenanceMargin: string
+  marginBalance: string
+  vipLevel: string
+  makerFee: string
+  takerFee: string
+  timestamp: string
+}
+
 interface BydfiTradesProps {
   walletAddress?: string
   onSignalCreated?: () => void | Promise<void>
@@ -22,23 +34,34 @@ interface BydfiTradesProps {
 
 export default function BydfiTrades({ walletAddress, onSignalCreated }: BydfiTradesProps) {
   const [positions, setPositions] = useState<BydfiPosition[]>([])
+  const [accountData, setAccountData] = useState<BydfiAccountData | null>(null)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<string>('')
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'connecting'>('connecting')
 
-  // Fetch BYDFI positions data
+  // Fetch BYDFI positions and account data
   const fetchBydfiData = async () => {
     try {
-      const response = await fetch('https://tigerhunt-pro-backend-k742.vercel.app/api/bydfi-positions')
-      const data = await response.json()
+      // Fetch positions
+      const positionsResponse = await fetch('https://tigerhunt-pro-backend-k742.vercel.app/api/bydfi-positions')
+      const positionsData = await positionsResponse.json()
       
-      if (data.success && Array.isArray(data.positions)) {
-        setPositions(data.positions)
+      // Fetch account data
+      const accountResponse = await fetch('https://tigerhunt-pro-backend-k742.vercel.app/api/bydfi-account')
+      const accountResponseData = await accountResponse.json()
+      
+      if (positionsData.success && Array.isArray(positionsData.positions)) {
+        setPositions(positionsData.positions)
         setLastUpdate(new Date().toLocaleString())
         setConnectionStatus('connected')
       } else {
         setPositions([])
       }
+      
+      if (accountResponseData.success && accountResponseData.account) {
+        setAccountData(accountResponseData.account)
+      }
+      
     } catch (error) {
       console.error('❌ Failed to fetch BYDFI data:', error)
       setConnectionStatus('disconnected')
@@ -139,6 +162,66 @@ export default function BydfiTrades({ walletAddress, onSignalCreated }: BydfiTra
           </button>
         </div>
       </div>
+
+      {/* Account Summary */}
+      {accountData && (
+        <div style={{
+          background: 'rgba(255,255,255,0.05)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          borderRadius: '8px',
+          padding: '16px',
+          marginBottom: '16px'
+        }}>
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '16px',
+            alignItems: 'center'
+          }}>
+            {/* Total Balance */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: '#888888', fontSize: '12px', marginBottom: '4px' }}>Total Balance</div>
+              <div style={{ color: '#ffffff', fontSize: '20px', fontWeight: 'bold' }}>
+                ${parseFloat(accountData.balance || '0').toLocaleString()}
+              </div>
+              <div style={{ color: '#888888', fontSize: '11px' }}>USDT</div>
+            </div>
+            
+            {/* Unrealized PnL */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: '#888888', fontSize: '12px', marginBottom: '4px' }}>Unrealized PnL</div>
+              <div style={{ 
+                color: parseFloat(accountData.pnl || '0') >= 0 ? '#00ff88' : '#ff6b6b', 
+                fontSize: '18px', 
+                fontWeight: 'bold' 
+              }}>
+                {parseFloat(accountData.pnl || '0') >= 0 ? '+' : ''}${parseFloat(accountData.pnl || '0').toFixed(2)}
+              </div>
+              <div style={{ color: '#888888', fontSize: '11px' }}>USDT</div>
+            </div>
+            
+            {/* Margin Ratio */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: '#888888', fontSize: '12px', marginBottom: '4px' }}>Margin Ratio</div>
+              <div style={{ color: '#ffffff', fontSize: '16px', fontWeight: '600' }}>
+                {accountData.marginRatio || '0.00%'}
+              </div>
+              <div style={{ color: '#888888', fontSize: '11px' }}>Risk Level</div>
+            </div>
+            
+            {/* VIP & Fees */}
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ color: '#888888', fontSize: '12px', marginBottom: '4px' }}>VIP Level</div>
+              <div style={{ color: '#ffa500', fontSize: '16px', fontWeight: 'bold' }}>
+                VIP {accountData.vipLevel || '0'}
+              </div>
+              <div style={{ color: '#888888', fontSize: '10px' }}>
+                M: {accountData.makerFee || '0.02%'} | T: {accountData.takerFee || '0.06%'}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Connection Status */}
       {connectionStatus === 'disconnected' && (

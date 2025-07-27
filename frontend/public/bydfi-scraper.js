@@ -12,6 +12,94 @@
   let isRunning = false;
   let intervalId = null;
   
+  // Function to extract account data from BYDFI page
+  function extractAccountData() {
+    try {
+      console.log('💰 Scanning BYDFI account data...');
+      
+      const accountData = {
+        balance: '0',
+        pnl: '0',
+        marginRatio: '0.00%',
+        maintenanceMargin: '0',
+        marginBalance: '0',
+        vipLevel: '0',
+        makerFee: '0.02%',
+        takerFee: '0.06%'
+      };
+      
+      // Try to find balance information
+      const balanceSelectors = [
+        '*[class*="balance"]',
+        '*[class*="Balance"]',
+        '*[class*="asset"]',
+        '*[class*="Asset"]',
+        'span:contains("USDT")',
+        'div:contains("USDT")'
+      ];
+      
+      // Try to find text patterns that look like balance/PnL
+      const allElements = document.querySelectorAll('*');
+      
+      allElements.forEach(element => {
+        const text = element.textContent?.trim() || '';
+        
+        // Look for balance (like "10,193.38 USDT")
+        if (/^\d{1,3}(,\d{3})*(\.\d{2})?\s*(USDT|USD)$/i.test(text)) {
+          const value = text.replace(/[,$A-Za-z\s]/g, '');
+          if (parseFloat(value) > parseFloat(accountData.balance)) {
+            accountData.balance = value;
+            console.log('💰 Found balance:', value);
+          }
+        }
+        
+        // Look for PnL (like "+123.45" or "-67.89")
+        if (/^[+-]?\d+(\.\d{2})?\s*(USDT|USD)?$/i.test(text)) {
+          const value = text.replace(/[A-Za-z\s]/g, '');
+          if (Math.abs(parseFloat(value)) > 0) {
+            accountData.pnl = value;
+            console.log('📊 Found PnL:', value);
+          }
+        }
+        
+        // Look for percentage (margin ratio)
+        if (/^\d+(\.\d{2})?%$/i.test(text)) {
+          accountData.marginRatio = text;
+          console.log('📋 Found margin ratio:', text);
+        }
+        
+        // Look for VIP level
+        if (/^VIP\s*\d+$/i.test(text)) {
+          accountData.vipLevel = text.replace(/VIP\s*/i, '');
+          console.log('⭐ Found VIP level:', accountData.vipLevel);
+        }
+        
+        // Look for maker/taker fees
+        if (/Maker:\s*\d+(\.\d{2})?%/i.test(text)) {
+          const match = text.match(/Maker:\s*(\d+(?:\.\d{2})?)%/i);
+          if (match) {
+            accountData.makerFee = match[1] + '%';
+            console.log('💼 Found maker fee:', accountData.makerFee);
+          }
+        }
+        
+        if (/Taker:\s*\d+(\.\d{2})?%/i.test(text)) {
+          const match = text.match(/Taker:\s*(\d+(?:\.\d{2})?)%/i);
+          if (match) {
+            accountData.takerFee = match[1] + '%';
+            console.log('💼 Found taker fee:', accountData.takerFee);
+          }
+        }
+      });
+      
+      return accountData;
+      
+    } catch (error) {
+      console.error('❌ Error extracting account data:', error);
+      return null;
+    }
+  }
+
   // Function to extract positions from BYDFI page
   function extractPositions() {
     try {
@@ -183,7 +271,6 @@
       
       if (result.success) {
         console.log(`✅ Successfully sent ${positions.length} positions to dashboard`);
-        console.log('🎯 Check your dashboard: https://tigerhunt-pro-frontend-ivory.vercel.app/dashboard');
       } else {
         console.error('❌ Failed to send positions:', result.error);
       }
@@ -192,13 +279,49 @@
       console.error('❌ Network error sending positions:', error);
     }
   }
+
+  // Function to send account data to dashboard
+  async function sendAccountDataToDashboard(accountData) {
+    try {
+      console.log(`💰 Sending account data to dashboard...`);
+      
+      const response = await fetch('https://tigerhunt-pro-backend-k742.vercel.app/api/bydfi-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(accountData)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log(`✅ Successfully sent account data: Balance $${accountData.balance}, PnL $${accountData.pnl}`);
+        console.log('🎯 Check your dashboard: https://tigerhunt-pro-frontend-ivory.vercel.app/dashboard');
+      } else {
+        console.error('❌ Failed to send account data:', result.error);
+      }
+      
+    } catch (error) {
+      console.error('❌ Network error sending account data:', error);
+    }
+  }
   
   // Main scraping function
   async function scrapeAndSend() {
     if (!isRunning) return;
     
+    console.log('🔄 Starting BYDFI data extraction...');
+    
+    // Extract both positions and account data
     const positions = extractPositions();
-    await sendPositionsToDashboard(positions);
+    const accountData = extractAccountData();
+    
+    // Send both to dashboard
+    await Promise.all([
+      sendPositionsToDashboard(positions),
+      accountData ? sendAccountDataToDashboard(accountData) : Promise.resolve()
+    ]);
     
     console.log(`⏰ Next scan in ${SCRAPE_INTERVAL/1000} seconds...`);
   }
