@@ -639,6 +639,9 @@
     try {
       console.log(`📤 Sending ${positions.length} positions to dashboard...`);
       
+      // Add timestamp for tracking
+      const timestamp = new Date().toLocaleTimeString();
+      
       const response = await fetch(DASHBOARD_API, {
         method: 'POST',
         headers: {
@@ -650,13 +653,17 @@
       const result = await response.json();
       
       if (result.success) {
-        console.log(`✅ Successfully sent ${positions.length} positions to dashboard`);
+        if (result.isPreservedData) {
+          console.log(`✅ [${timestamp}] Dashboard kept last good positions (${positions.length}) - scraper sent empty data`);
+        } else {
+          console.log(`✅ [${timestamp}] Successfully sent ${positions.length} positions to dashboard`);
+        }
       } else {
-        console.error('❌ Failed to send positions:', result.error);
+        console.error(`❌ [${timestamp}] Failed to send positions:`, result.error);
       }
       
     } catch (error) {
-      console.error('❌ Network error sending positions:', error);
+      console.error(`❌ [${timestamp}] Network error sending positions:`, error);
     }
   }
 
@@ -743,6 +750,36 @@
     console.log('✅ Scraper stopped');
   };
   
+  // Function to check current scraper status
+  window.checkScraperStatus = function() {
+    console.log('📊 BYDFI SCRAPER STATUS CHECK');
+    console.log('==================================');
+    console.log(`⏰ Scraper running: ${isRunning}`);
+    console.log(`🔄 Interval ID: ${intervalId}`);
+    console.log(`📍 Current URL: ${window.location.href}`);
+    console.log(`🏷️ Page title: ${document.title}`);
+    
+    // Quick position check
+    const positions = extractPositions();
+    console.log(`🎯 Positions found: ${positions.length}`);
+    if (positions.length > 0) {
+      positions.forEach(pos => console.log(`  - ${pos.symbol}: ${pos.qty} (PnL: ${pos.unrealizedPnl})`));
+    }
+    
+    // Quick account check
+    const account = extractAccountData();
+    console.log(`💰 Account balance: ${account?.balance || 'Not found'} USDT`);
+    console.log(`📊 Account PnL: ${account?.pnl || 'Not found'} USDT`);
+    
+    console.log('==================================');
+    
+    if (!isRunning) {
+      console.log('💡 To start scraper: startBydfiScraper()');
+    } else {
+      console.log('💡 To stop scraper: stopBydfiScraper()');
+    }
+  };
+
   // Debug function to analyze page structure
   window.debugBydfiPage = function() {
     console.log('🔍 DEBUG: Analyzing BYDFI page structure...');
@@ -809,9 +846,11 @@
   console.log('📋 Commands:');
   console.log('  startBydfiScraper() - Start automatic scraping');
   console.log('  stopBydfiScraper()  - Stop automatic scraping');
+  console.log('  checkScraperStatus() - Check current status & data');
   console.log('  debugBydfiPage()    - Debug page structure');
   console.log('');
-  console.log('💡 If positions are not detected, try: debugBydfiPage()');
+  console.log('💡 If positions disappear, try: checkScraperStatus()');
+  console.log('💡 If positions not detected, try: debugBydfiPage()');
   console.log('🚀 Auto-starting scraper in 3 seconds...');
   
   setTimeout(() => {

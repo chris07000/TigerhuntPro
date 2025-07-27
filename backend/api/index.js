@@ -6,9 +6,11 @@ let signals = [];
 let signalCounter = 1;
 const SIGNAL_RETENTION_HOURS = 24; // Keep signals for 24 hours
 
-// BYDFI positions storage
+// BYDFI positions storage with persistence
 let bydfiPositions = [];
 let bydfiLastUpdate = null;
+let bydfiLastGoodPositions = []; // Keep last good positions
+let bydfiLastGoodUpdate = null;
 
 // BYDFI account data storage
 let bydfiAccountData = null;
@@ -291,9 +293,9 @@ module.exports = async (req, res) => {
           body = JSON.parse(body);
         }
 
-        // Store BYDFI positions data
+        // Store BYDFI positions data with smart persistence
         if (Array.isArray(body)) {
-          bydfiPositions = body.map((pos, index) => ({
+          const newPositions = body.map((pos, index) => ({
             id: `bydfi_${Date.now()}_${index}`,
             symbol: pos.symbol || '',
             qty: pos.qty || '0',
@@ -305,14 +307,40 @@ module.exports = async (req, res) => {
             positionPnl: pos.positionPnl || '0',
             timestamp: new Date().toISOString()
           }));
-          bydfiLastUpdate = new Date().toISOString();
           
-          console.log(`📊 BYDFI positions updated: ${bydfiPositions.length} positions`);
+          // Smart position management: Only update if we have good data OR it's been more than 2 minutes
+          const now = Date.now();
+          const timeSinceLastGoodUpdate = bydfiLastGoodUpdate ? (now - new Date(bydfiLastGoodUpdate).getTime()) : Infinity;
+          const twoMinutesInMs = 2 * 60 * 1000;
+          
+          if (newPositions.length > 0) {
+            // We have positions - always update
+            bydfiPositions = newPositions;
+            bydfiLastGoodPositions = [...newPositions]; // Keep copy of good data
+            bydfiLastGoodUpdate = new Date().toISOString();
+            bydfiLastUpdate = new Date().toISOString();
+            
+            console.log(`📊 BYDFI positions updated: ${bydfiPositions.length} positions (GOOD DATA)`);
+          } else if (timeSinceLastGoodUpdate > twoMinutesInMs) {
+            // No positions AND it's been more than 2 minutes - clear old data
+            bydfiPositions = [];
+            bydfiLastUpdate = new Date().toISOString();
+            
+            console.log(`📊 BYDFI positions cleared: No positions for 2+ minutes`);
+          } else {
+            // No positions BUT we recently had good data - keep last good positions
+            bydfiPositions = [...bydfiLastGoodPositions];
+            bydfiLastUpdate = new Date().toISOString();
+            
+            const minutesAgo = Math.round(timeSinceLastGoodUpdate / (60 * 1000));
+            console.log(`📊 BYDFI positions preserved: Using last good data (${minutesAgo} min ago)`);
+          }
           
           return res.status(200).json({
             success: true,
             message: `Updated ${bydfiPositions.length} BYDFI positions`,
-            positions: bydfiPositions
+            positions: bydfiPositions,
+            isPreservedData: newPositions.length === 0 && bydfiPositions.length > 0
           });
         } else {
           return res.status(400).json({
