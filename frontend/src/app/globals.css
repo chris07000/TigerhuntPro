@@ -65,6 +65,43 @@
     padding: 24px 0;
   }
   
+  /* Mobile responsive adjustments */
+  @media (max-width: 768px) {
+    .parasite-title {
+      font-size: 1.8rem;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+    }
+    
+    .parasite-subtitle {
+      font-size: 0.875rem;
+      margin-bottom: 16px;
+    }
+    
+    .parasite-header {
+      padding: 16px 0;
+    }
+    
+    .main-content {
+      padding: 16px 0;
+    }
+    
+    .parasite-card {
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    
+    .container {
+      padding-left: 16px !important;
+      padding-right: 16px !important;
+    }
+    
+    .section-header {
+      font-size: 1rem;
+      margin-bottom: 16px;
+    }
+  }
+  
   /* Cards */
   .parasite-card {
     background-color: rgba(255, 255, 255, 0.03);
@@ -246,6 +283,15 @@
     display: grid;
     grid-template-columns: 2fr 1fr;
     gap: 20px;
+  }
+  
+  /* Mobile responsive charts grid */
+  @media (max-width: 768px) {
+    .charts-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
   }
   
   /* Signal specific styling */

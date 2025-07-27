@@ -12,6 +12,7 @@ export default function Dashboard() {
   const { signals, connectionStatus, refreshSignals, isConnected } = useWebSocket()
   const [selectedSignal, setSelectedSignal] = useState<Signal | null>(null)
   const [isHydrated, setIsHydrated] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
   
   // Trade management state
   const [trades, setTrades] = useState<Trade[]>([])
@@ -29,6 +30,16 @@ export default function Dashboard() {
     setIsHydrated(true)
     fetchTrades()
     fetchAnalytics()
+    
+    // Check for mobile screen size
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768)
+    }
+    
+    checkMobile()
+    window.addEventListener('resize', checkMobile)
+    
+    return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
   useEffect(() => {
@@ -125,17 +136,36 @@ export default function Dashboard() {
           </div>
 
           {/* Navigation Tabs */}
-          <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '20px', marginBottom: '20px', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '20px' }}>
+          <div 
+            style={{ 
+              display: 'flex', 
+              flexWrap: 'wrap',
+              gap: '12px', 
+              borderBottom: '1px solid rgba(255,255,255,0.1)', 
+              paddingBottom: '20px', 
+              marginBottom: '20px',
+              alignItems: 'center',
+              justifyContent: 'space-between'
+            }}
+          >
+            <div 
+              style={{ 
+                display: 'flex', 
+                flexWrap: 'wrap',
+                gap: '8px',
+                minWidth: '0' // Allow shrinking
+              }}
+            >
               <div
                 style={{
-                  padding: '12px 24px',
+                  padding: isMobile ? '8px 12px' : '12px 24px',
                   border: '1px solid rgba(255,255,255,0.3)',
                   borderRadius: '8px',
                   backgroundColor: 'rgba(255,255,255,0.1)',
                   color: '#ffffff',
-                  fontSize: '14px',
-                  fontWeight: '600'
+                  fontSize: isMobile ? '12px' : '14px',
+                  fontWeight: '600',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 Live Signals
@@ -143,33 +173,35 @@ export default function Dashboard() {
               <a
                 href="/journey"
                 style={{
-                  padding: '12px 24px',
+                  padding: isMobile ? '8px 12px' : '12px 24px',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   backgroundColor: 'rgba(255,255,255,0.03)',
                   color: '#888888',
-                  fontSize: '14px',
+                  fontSize: isMobile ? '12px' : '14px',
                   fontWeight: '400',
                   textDecoration: 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                Trading Journey
+                {isMobile ? 'Journey' : 'Trading Journey'}
               </a>
               <a
                 href="/risk"
                 style={{
-                  padding: '12px 24px',
+                  padding: isMobile ? '8px 12px' : '12px 24px',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   backgroundColor: 'rgba(255,255,255,0.03)',
                   color: '#888888',
-                  fontSize: '14px',
+                  fontSize: isMobile ? '12px' : '14px',
                   fontWeight: '400',
                   textDecoration: 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap'
                 }}
               >
                 Tiger RISK
@@ -177,19 +209,20 @@ export default function Dashboard() {
               <a
                 href="/trading"
                 style={{
-                  padding: '12px 24px',
+                  padding: isMobile ? '8px 12px' : '12px 24px',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   backgroundColor: 'rgba(255,255,255,0.03)',
                   color: '#888888',
-                  fontSize: '14px',
+                  fontSize: isMobile ? '12px' : '14px',
                   fontWeight: '400',
                   textDecoration: 'none',
                   cursor: 'pointer',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  whiteSpace: 'nowrap'
                 }}
               >
-                Admin Trading
+                {isMobile ? 'Admin' : 'Admin Trading'}
               </a>
             </div>
             
@@ -199,19 +232,21 @@ export default function Dashboard() {
               target="_blank"
               rel="noopener noreferrer"
               style={{
-                padding: '12px 24px',
+                padding: isMobile ? '8px 12px' : '12px 24px',
                 border: '1px solid rgba(255,165,0,0.4)',
                 borderRadius: '8px',
                 backgroundColor: 'rgba(255,165,0,0.1)',
                 color: '#ffa500',
-                fontSize: '14px',
+                fontSize: isMobile ? '12px' : '14px',
                 fontWeight: '600',
                 textDecoration: 'none',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px'
+                gap: '4px',
+                whiteSpace: 'nowrap',
+                flexShrink: 0
               }}
               onMouseEnter={(e) => {
                 const target = e.target as HTMLElement
@@ -224,7 +259,7 @@ export default function Dashboard() {
                 target.style.borderColor = 'rgba(255,165,0,0.4)'
               }}
             >
-              Start Trading on Hyperliquid
+              {isMobile ? 'Hyperliquid' : 'Start Trading on Hyperliquid'}
             </a>
           </div>
           
