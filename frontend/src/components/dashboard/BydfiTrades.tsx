@@ -321,23 +321,7 @@ export default function BydfiTrades({ walletAddress, onSignalCreated }: BydfiTra
         </div>
       )}
 
-      {/* Instructions for scraping */}
-      {positions.length === 0 && connectionStatus === 'connected' && (
-        <div style={{
-          background: 'rgba(255, 165, 0, 0.1)',
-          border: '1px solid rgba(255, 165, 0, 0.3)',
-          borderRadius: '8px',
-          padding: '16px',
-          marginTop: '16px',
-          color: '#ffa500',
-          fontSize: '14px'
-        }}>
-          <div style={{ fontWeight: '600', marginBottom: '8px' }}>📋 Setup Instructions:</div>
-          <div>1. Open BYDFI positions page in another tab</div>
-          <div>2. Copy and paste the scraping script in browser console</div>
-          <div>3. Positions will automatically appear here</div>
-        </div>
-      )}
+
     </div>
   )
 } 
