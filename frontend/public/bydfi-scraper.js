@@ -750,6 +750,122 @@
     console.log('✅ Scraper stopped');
   };
   
+  // Function to manually extract positions with aggressive search
+  window.manualExtractPositions = function() {
+    console.log('🔍 MANUAL POSITION EXTRACTION - AGGRESSIVE SEARCH');
+    console.log('================================================');
+    
+    // Search for specific trading symbols
+    const tradingSymbols = ['AAVE', 'MOODENG', 'BTC', 'ETH', 'SOL', 'DOGE'];
+    const foundElements = [];
+    
+    tradingSymbols.forEach(symbol => {
+      const allElements = document.querySelectorAll('*');
+      allElements.forEach(element => {
+        const text = element.textContent || '';
+        
+        // Look for symbol patterns
+        if (text.includes(`${symbol}/USDT`) || text.includes(`${symbol}USDT`) || 
+            text.includes(`${symbol}/USD`) || text.includes(`${symbol} `)) {
+          
+          // Get surrounding context
+          const parent = element.parentElement;
+          const siblings = parent ? Array.from(parent.children) : [];
+          const siblingTexts = siblings.map(s => s.textContent?.trim()).filter(t => t);
+          
+          if (siblingTexts.length > 3) { // Has enough context
+            foundElements.push({
+              symbol: symbol,
+              text: text.trim(),
+              element: element,
+              context: siblingTexts,
+              html: element.innerHTML,
+              parentHTML: parent?.innerHTML?.substring(0, 200) + '...'
+            });
+          }
+        }
+      });
+    });
+    
+    console.log(`🎯 Found ${foundElements.length} potential position elements:`);
+    foundElements.forEach((item, index) => {
+      console.log(`\n${index + 1}. Symbol: ${item.symbol}`);
+      console.log(`   Text: "${item.text}"`);
+      console.log(`   Context: [${item.context.join(' | ')}]`);
+      console.log(`   HTML: ${item.html}`);
+    });
+    
+    // Try to extract positions from these elements
+    const extractedPositions = [];
+    foundElements.forEach(item => {
+      const position = tryExtractFromContext(item.context, item.symbol);
+      if (position) {
+        extractedPositions.push(position);
+        console.log(`✅ Extracted position: ${position.symbol} | ${position.qty} | PnL: ${position.unrealizedPnl}`);
+      }
+    });
+    
+    console.log(`\n📊 Total extracted positions: ${extractedPositions.length}`);
+    return extractedPositions;
+  };
+  
+  // Helper function to extract position from context
+  function tryExtractFromContext(contextArray, baseSymbol) {
+    try {
+      const position = {
+        symbol: '',
+        qty: '',
+        entryPrice: '',
+        markPrice: '',
+        liqPrice: '',
+        unrealizedPnl: '',
+        unrealizedRoi: '',
+        positionPnl: '',
+        timestamp: new Date().toISOString()
+      };
+      
+      contextArray.forEach(text => {
+        // Symbol
+        if (text.includes(`${baseSymbol}/USDT`) || text.includes(`${baseSymbol}USDT`)) {
+          position.symbol = `${baseSymbol}USDT`;
+        }
+        // Quantity with symbol
+        else if (text.includes(baseSymbol) && /\d+\.?\d*/.test(text)) {
+          const qtyMatch = text.match(/(\d+\.?\d*)/);
+          if (qtyMatch) position.qty = qtyMatch[1];
+        }
+        // Prices
+        else if (/^\d+\.?\d*$/.test(text) && parseFloat(text) > 0) {
+          if (!position.entryPrice) position.entryPrice = text;
+          else if (!position.markPrice) position.markPrice = text;
+          else if (!position.liqPrice) position.liqPrice = text;
+        }
+        // PnL
+        else if (/^[+-]?\d+\.?\d*\s*(USDT|USD)$/.test(text)) {
+          const pnlMatch = text.match(/^([+-]?\d+\.?\d*)/);
+          if (pnlMatch) position.unrealizedPnl = pnlMatch[1];
+        }
+        // Percentage
+        else if (/^[+-]?\d+\.?\d*%$/.test(text)) {
+          position.unrealizedRoi = text;
+        }
+      });
+      
+      // Fill defaults
+      if (!position.qty) position.qty = '1.0';
+      if (!position.markPrice) position.markPrice = position.entryPrice;
+      if (!position.liqPrice) position.liqPrice = '0';
+      if (!position.unrealizedPnl) position.unrealizedPnl = '0';
+      if (!position.unrealizedRoi) position.unrealizedRoi = '0%';
+      position.positionPnl = position.unrealizedPnl;
+      
+      return position.symbol ? position : null;
+    } catch (error) {
+      console.error('❌ Error extracting from context:', error);
+      return null;
+    }
+  }
+
   // Function to check current scraper status
   window.checkScraperStatus = function() {
     console.log('📊 BYDFI SCRAPER STATUS CHECK');
@@ -764,6 +880,9 @@
     console.log(`🎯 Positions found: ${positions.length}`);
     if (positions.length > 0) {
       positions.forEach(pos => console.log(`  - ${pos.symbol}: ${pos.qty} (PnL: ${pos.unrealizedPnl})`));
+    } else {
+      console.log('❌ No positions found with normal extraction');
+      console.log('💡 Try: manualExtractPositions()');
     }
     
     // Quick account check
@@ -778,6 +897,7 @@
     } else {
       console.log('💡 To stop scraper: stopBydfiScraper()');
     }
+    console.log('🔍 For aggressive search: manualExtractPositions()');
   };
 
   // Debug function to analyze page structure
@@ -844,13 +964,14 @@
   // Auto-start the scraper
   console.log('🎯 BYDFI Scraper loaded successfully!');
   console.log('📋 Commands:');
-  console.log('  startBydfiScraper() - Start automatic scraping');
-  console.log('  stopBydfiScraper()  - Stop automatic scraping');
-  console.log('  checkScraperStatus() - Check current status & data');
-  console.log('  debugBydfiPage()    - Debug page structure');
+  console.log('  startBydfiScraper()     - Start automatic scraping');
+  console.log('  stopBydfiScraper()      - Stop automatic scraping');
+  console.log('  checkScraperStatus()    - Check current status & data');
+  console.log('  manualExtractPositions() - Aggressive position search');
+  console.log('  debugBydfiPage()        - Debug page structure');
   console.log('');
   console.log('💡 If positions disappear, try: checkScraperStatus()');
-  console.log('💡 If positions not detected, try: debugBydfiPage()');
+  console.log('💡 If positions not detected, try: manualExtractPositions()');
   console.log('🚀 Auto-starting scraper in 3 seconds...');
   
   setTimeout(() => {
